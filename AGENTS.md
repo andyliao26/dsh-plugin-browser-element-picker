@@ -130,11 +130,13 @@ The guest resolves exactly one of:
 
 `targets[].react` is `{ component, source }` or `null`. `component` is the nearest
 function component name found by walking `fiber.return` (wrappers and one or two
-character minified names rejected); `source` is `path:line` normalized from
-`_debugSource` / `__source` with bundler prefixes and query strings stripped. A
-source without a component name is dropped — the pair is useless without knowing
-what it belongs to. Both fields only exist on development builds; production
-pages must report `null`, never a placeholder.
+character minified names rejected); `source` is a `src/`-relative location taken
+from `_debugSource` when React provides it, otherwise from the nearest owner stack
+frame (`_debugStack`) naming a `.jsx`/`.tsx`/`.vue`/`.svelte` file outside vendor
+code. Stack fallback yields the file only: stack coordinates are post-transform,
+so the line would point into the module rather than the source. A source without a
+component name is dropped. Both fields only exist on development builds;
+production pages must report `null`, never a placeholder.
 
 Design deltas are stored per element (a parallel array kept in step with
 `targets`), not by array index; removing a target removes its deltas, and

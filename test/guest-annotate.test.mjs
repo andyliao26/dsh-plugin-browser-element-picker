@@ -125,6 +125,12 @@ const clickPage = (selector, shift = false) => evaluate(client, `(() => {
   return { x, y };
 })();`);
 
+// Fixture elements below the fold need the page scrolled before hit-testing.
+const clickPageScrolled = async (selector) => {
+  await evaluate(client, `document.querySelector(${JSON.stringify(selector)}).scrollIntoView({ block: "center" }); true`);
+  return clickPage(selector);
+};
+
 const typeComment = (text) => evaluate(client, `(() => {
   const area = ${SR}.querySelector('[data-role="comment"]');
   area.value = ${JSON.stringify(text)};
@@ -683,18 +689,40 @@ const noMetadata = await evaluate(client, "window.__r");
 assert.equal(noMetadata.targets[0].react, null, "a page without React metadata reports no identity");
 
 assert.equal(await evaluate(client, START), "started");
-await clickPage("#source-only");
+await clickPageScrolled("#source-only");
 await keyInCard("Enter");
 await sleep(80);
 const sourceOnly = await evaluate(client, "window.__r");
 assert.equal(sourceOnly.targets[0].react, null, "a source location without a component name is dropped");
 
 assert.equal(await evaluate(client, START), "started");
-await clickPage("#minified-name");
+await clickPageScrolled("#minified-name");
 await keyInCard("Enter");
 await sleep(80);
 const minified = await evaluate(client, "window.__r");
 assert.equal(minified.targets[0].react, null, "a minified component name is rejected");
+
+assert.equal(await evaluate(client, START), "started");
+await clickPageScrolled("#stack-source");
+await keyInCard("Enter");
+await sleep(80);
+const stacked = await evaluate(client, "window.__r");
+assert.deepEqual(
+  stacked.targets[0].react,
+  { component: "ToolbarCard", source: "src/components/Toolbar.jsx" },
+  "a React 19 owner stack supplies the file when _debugSource is gone",
+);
+
+assert.equal(await evaluate(client, START), "started");
+await clickPageScrolled("#absolute-source");
+await keyInCard("Enter");
+await sleep(80);
+const absolute = await evaluate(client, "window.__r");
+assert.deepEqual(
+  absolute.targets[0].react,
+  { component: "ReportPanel", source: "src/panels/ReportPanel.tsx:12" },
+  "an absolute dev-server path is trimmed to its src-relative tail",
+);
 
 assert.equal(await evaluate(client, START), "started");
 await clickPage("._label_4f8c");

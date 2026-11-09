@@ -21,7 +21,7 @@
 
 - 不引入 per-target 评论（已明确排除）。
 - 不输出组件祖先链（`App > OrderForm > Toolbar`）。
-- 不做 React 生产构建的源码定位：不解析调用栈、不临时替换 React dispatcher、不走 devtools 协议。这些手段侵入页面运行时，与「标注不改页面」的边界冲突。
+- 不做 React 生产构建的源码定位：生产包里没有开发元数据、名字也被压缩，返回 `null` 而不是猜。不临时替换 React dispatcher、不调用组件函数、不走 devtools 协议——那些手段侵入页面运行时，与「标注不改页面」的边界冲突。
 - 不因为有了源码位置就缩短或改写选择器。
 
 ## Decisions
@@ -65,6 +65,16 @@
 ### 8. 删除 `prompt.headerSingle` / `headerMany` / `footer` / `designFallback`
 
 四个键整体删除，不是留空。留空键会让「块内没有指令」这条要求变成可绕过的——以后有人复用键名就能把文案加回来。
+
+### 9. React 19 的源码位置从 owner 栈兜底，且只取文件
+
+React 19 删掉了 `_debugSource`，把 JSX 调用点放进 `_debugStack`（一个 Error）。发现的经过：在 Vite 8 + React 19.3.1 的临时开发页上跑真实 guest，fiber 链能拿到组件名，而五个 `_debugSource` 变体（`_debugSource`、`__source`、`_source`、`debugSource`、`memoizedProps.__source`）全部落空。照原设计，React 19 会只剩组件名——而 React 19 是新项目的默认版本，等于把主要价值丢掉。
+
+做法：属性探测全部失败后，再从最近的 fiber 开始读 `_debugStack.stack`，取第一个指向 `.jsx` / `.tsx` / `.vue` / `.svelte`、且不在 `node_modules`、`react-dom`、jsx runtime 里的帧。只读一个 Error 的字符串，不调用页面代码。
+
+**只取文件、不取行号。** 栈坐标是转换后的模块位置：同一页实测，源码第 4 行的 JSX 在栈里报第 9 行（Vite 转译后 `jsxDEV` 调用所在行）。错行号比没有行号更糟——模型会照着改到相邻的位置；只给文件足够 grep 到组件。
+
+**绝对路径裁到 `src/`。** React 18 的 `_debugSource.fileName` 在 Vite 下是 `/private/tmp/.../src/Toolbar.jsx`；原样输出会把你机器上的目录写进发给模型的提示词。统一裁到 `src/` 起点，没有 `/src/` 段时保留原样（monorepo 里可能因此丢掉包名，可接受）。
 
 ## Risks / Trade-offs
 

@@ -75,14 +75,9 @@ The system SHALL count on the live page how many elements the produced selector 
 - **WHEN** the produced selector matches exactly one element
 - **THEN** the target reports a match count of one
 
-### Requirement: React identity is resolved from page metadata only
+### Requirement: React identity reports the nearest component name
 
-When the page exposes React development metadata on the picked element, the system SHALL report the nearest function component name and the source location of the JSX that produced the element, normalized to `path:line` with bundler prefixes and cache-busting query strings removed. When that metadata is absent, the system SHALL report no React identity rather than a placeholder.
-
-#### Scenario: Component and source from the fiber chain
-- **WHEN** the picked button's fiber chain reaches a component named `Toolbar` and carries `_debugSource` `webpack-internal:///./src/components/Toolbar.tsx:42:7`
-- **THEN** the target reports component `Toolbar`
-- **AND** the target reports source `src/components/Toolbar.tsx:42`
+The system SHALL report the nearest function component name found by walking the fiber return chain, skipping host nodes, framework wrappers, and one or two character minified identifiers. When no acceptable name exists, the system SHALL report no React identity rather than a placeholder.
 
 #### Scenario: Production page has no metadata
 - **WHEN** no React metadata is present on the element or anywhere on its ancestor chain
@@ -91,6 +86,23 @@ When the page exposes React development metadata on the picked element, the syst
 #### Scenario: Minified component names are rejected
 - **WHEN** the only component name found on the chain is a one or two character minified identifier
 - **THEN** no component name is reported
+
+### Requirement: Source location comes from debug metadata or the owner stack
+
+The system SHALL report a source location as a `src/`-relative path with bundler prefixes, origins, and query strings removed: `path:line` when React exposes `_debugSource`, otherwise the file alone from the nearest owner stack frame naming a `.jsx`/`.tsx`/`.vue`/`.svelte` file outside vendor code, because stack coordinates are post-transform.
+
+#### Scenario: Component and source from the fiber chain
+- **WHEN** the picked button's fiber chain reaches a component named `Toolbar` and carries `_debugSource` `webpack-internal:///./src/components/Toolbar.tsx:42:7`
+- **THEN** the target reports component `Toolbar`
+- **AND** the target reports source `src/components/Toolbar.tsx:42`
+
+#### Scenario: Owner stack supplies the file
+- **WHEN** React 19 exposes no `_debugSource` but the owner stack names `http://127.0.0.1:5199/src/components/Toolbar.jsx:9:30`
+- **THEN** the target reports source `src/components/Toolbar.jsx` with no line number
+
+#### Scenario: Absolute dev-server path keeps the source tail
+- **WHEN** `_debugSource.fileName` is `/private/tmp/app/src/panels/ReportPanel.tsx` with line 12
+- **THEN** the target reports source `src/panels/ReportPanel.tsx:12`
 
 ### Requirement: React identity requires a component name
 

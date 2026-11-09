@@ -31,7 +31,9 @@
     <div class="flex items-center gap-2" style="margin-top: 12px; height: 24px;"></div>
     <div class="order-card flex p-4" style="margin-top: 12px; height: 24px;"></div>
     <div id="source-only" style="margin-top: 12px; height: 16px;"></div>
+    <div id="absolute-source" style="margin-top: 12px; height: 16px;"></div>
     <div id="minified-name" style="margin-top: 12px; height: 16px;"></div>
+    <div id="stack-source" style="margin-top: 12px; height: 16px;"></div>
   </div>
   <script>
     window.__pageClicks = 0;
@@ -66,6 +68,30 @@
 
       const minified = { type: Ab, return: root, _debugSource: { fileName: './src/widgets/Chart.jsx', lineNumber: 5 } };
       document.querySelector('#minified-name').__reactFiber$test = { type: 'div', return: minified };
+
+      // React 19 dropped _debugSource; the owner stack still names the JSX site.
+      function ToolbarCard() {}
+      const stacked = {
+        type: 'div',
+        return: { type: ToolbarCard, return: root },
+        _debugStack: {
+          stack: [
+            'Error: react-stack-top-frame',
+            '    at exports.jsxDEV (http://127.0.0.1:5199/node_modules/.vite/deps/react_jsx-dev-runtime.js?v=1:196:25)',
+            '    at ToolbarCard (http://127.0.0.1:5199/src/components/Toolbar.jsx:9:30)',
+          ].join('\n'),
+        },
+      };
+      document.querySelector('#stack-source').__reactFiber$test = stacked;
+
+      // Vite hands back absolute paths for _debugSource; they must land as src-relative.
+      function ReportPanel() {}
+      const absolute = {
+        type: 'div',
+        _debugSource: { fileName: '/private/tmp/app/src/panels/ReportPanel.tsx', lineNumber: 12, columnNumber: 5 },
+        return: { type: ReportPanel, return: root },
+      };
+      document.querySelector('#absolute-source').__reactFiber$test = absolute;
     })();
   </script>
 </body>

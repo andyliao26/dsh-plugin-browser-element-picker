@@ -24,8 +24,14 @@
 ## 4. 集成与发布
 
 - [x] 4.1 `package.json` 版本升到 `0.8.0`；验证：`for f in test/*.test.mjs; do node "$f" || break; done` 五套件全绿
-- [ ] 4.2 在真实 React 开发页面（Vite 或 Next，存在组件边界）手测一次，确认 `组件：` 行与 `file:line` 可用，同时确认生产构建页面不出现该行；验证：两端页面的标注块分别有/无 `组件：` 行，结果记录在 PR 描述里
+- [x] 4.2 在真实 React 开发页面（Vite 或 Next，存在组件边界）手测一次，确认 `组件：` 行与 `file:line` 可用，同时确认生产构建页面不出现该行；验证：两端页面的标注块分别有/无 `组件：` 行，结果记录在 PR 描述里
 - [x] 4.3 `openspec validate annotation-block-and-react-locator --strict`；验证：无 error 与 warning
+
+## 5. React 19 栈回退
+
+- [x] 5.1 属性探测全部落空时从 `_debugStack` 取第一个非 vendor 的 `.jsx/.tsx/.vue/.svelte` 帧，只取文件不取行号；同时把绝对路径裁到 `src/` 起点。验证：fixture 的 `#stack-source` 得到 `src/components/Toolbar.jsx`，`#absolute-source` 得到 `src/panels/ReportPanel.tsx:12`
+- [x] 5.2 真实页面三态验证：React 19 开发页得到 `{component:"Toolbar", source:"src/Toolbar.jsx"}`，React 18 开发页得到 `{component:"Toolbar", source:"src/Toolbar.jsx:4"}`，React 19 生产构建得到 `null`。验证：`/tmp/react-check`、`/tmp/react18-check` 的 check 脚本输出上述三行
+- [x] 5.3 把栈回退的取舍写回 artifacts：design 的 Non-Goal 与新增决策、element-locator 的两条场景、AGENTS 的 `react` 契约、README 的使用边界。验证：`openspec validate annotation-block-and-react-locator --strict` 通过
 
 ## Workflow follow-up
 
