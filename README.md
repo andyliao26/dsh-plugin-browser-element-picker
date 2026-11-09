@@ -166,7 +166,7 @@ dsh --profile picker-check --dump-config | grep -A2 'id: browser-element-picker'
 | --- | --- |
 | 按钮挂载 | `MutationObserver` 扫描 `webview[data-sidebar-browser-frame]`，向上找到「直接子节点含地址输入框」的工具栏行把按钮 `append` 进去；React 重渲染丢掉时下一帧 `sync` 补回。探测失败退回悬浮按钮 |
 | 标注会话 | 一次 `webview.executeJavaScript(guestAnnotate(...))` 承载整个会话：shadow DOM 里的评论卡片、设计面板、标注框；会话结束（Enter / ⌘Enter / Esc）才把结果 promise 交回宿主 |
-| 元素描述 | 选择器优先 `#id`，否则自底向上拼 `tag.class:nth-of-type(n)` 并用 `querySelectorAll` 验证唯一；同时采集文本、属性、视口/文档坐标、计算样式、outerHTML。提示词只使用选择器、标签/文本与设计 delta，其余字段保留在会话结果中 |
+| 元素描述 | 选择器优先 `#id`，其次是稳定的作者属性（`data-testid` / `name` / `aria-label` / `alt` / `placeholder` 等），最后才自底向上拼 `tag.class:nth-of-type(n)`；CSS-module、`css-*` / `sc-*` / `jsx-*` / `styled-*` 这类生成类会被丢弃，并用 `querySelectorAll` 验证唯一。同时采集文本、属性、视口/文档坐标、计算样式、outerHTML。提示词只使用选择器、标签/文本与设计 delta，其余字段保留在会话结果中 |
 | 设计模式 | 打开时把 `getComputedStyle` 落成字符串基线并回显；改动只进草稿、不写 DOM；「应用」把草稿转成 `{property, from, to}` delta 记进会话结果，卡片按行展示 |
 | 注入提示词 | 从 `webview.closest('[data-sidebar-right-session]')`（回退 `ctx.sidebarRight.mounted`）拿 Session；优先 `shell.insertReference(...)` 插入短的 reference chip（codec 在发送时展开整段），失败退回 `insertQuote(block)`，再退回 `requestDraftInitialization(binding, { prompt, whenDraftExists: 'append' })` |
 | 直接发送 | 同一 binding 调 `conversation.input.shellFor(binding).submit('queue')`，与 composer 的 Enter 提交共用事务 |

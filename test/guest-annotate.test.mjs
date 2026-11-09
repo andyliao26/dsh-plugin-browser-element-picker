@@ -662,6 +662,23 @@ assert.equal(detached.targets.length, 1, "the detached target is omitted");
 assert.equal(detached.targets[0].selector, "#first");
 assert.equal(detached.design.length, 0);
 
+// ---------------------------------------------------------------- 11. React-shaped markup
+assert.equal(await evaluate(client, START), "started");
+await clickPage('[data-testid="reanalyze"]');
+await keyInCard("Enter");
+await sleep(80);
+const byAttribute = await evaluate(client, "window.__r");
+assert.equal(byAttribute.targets[0].selector, 'button[data-testid="reanalyze"]', "a stable data-* attribute beats hashed classes");
+
+assert.equal(await evaluate(client, START), "started");
+await clickPage("._label_4f8c");
+await keyInCard("Enter");
+await sleep(80);
+const byFallback = await evaluate(client, "window.__r");
+const fallbackSelector = byFallback.targets[0].selector;
+assert.equal(fallbackSelector.includes("_label_"), false, "a generated class is dropped");
+assert.match(fallbackSelector, / span$/, "the generated class falls back to the element path");
+
 client.close();
 chrome.kill("SIGKILL");
 server.close();
