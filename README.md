@@ -79,9 +79,9 @@
 标准 DSH bundle 包（`dsh.bundle.patch` + `dsh.client`），安装后由 `dsh-client-modules` 挂载浏览器端代码，无需重新构建 DSH。
 
 1. 侧边栏 **Plugins** → **Add plugin** → 箭头 → **Install a third-party plugin**
-2. 粘贴本目录绝对路径：
+2. 粘贴本目录的绝对路径（先把仓库 clone 到本地，再粘贴该目录）：
    ```
-   /Users/andyliao/workspace/hy-cc-marketplace/dsh-plugins/sidebar-browser-element-picker
+   /path/to/dsh-plugin-browser-element-picker
    ```
 3. 勾选信任提示 → **Install**（bundle 默认启用；profile 开了 HMR 会直接热加载）
 4. 打开右侧 **Browser** 载入任意 http(s) 页面，地址栏右侧出现准星按钮
