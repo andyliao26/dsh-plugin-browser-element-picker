@@ -28,10 +28,45 @@
       <button class="_btn_9x2k1" data-testid="reanalyze" aria-label="重新分析">重新分析</button>
       <span class="_label_4f8c">已完成</span>
     </div>
+    <div class="flex items-center gap-2" style="margin-top: 12px; height: 24px;"></div>
+    <div class="order-card flex p-4" style="margin-top: 12px; height: 24px;"></div>
+    <div id="source-only" style="margin-top: 12px; height: 16px;"></div>
+    <div id="minified-name" style="margin-top: 12px; height: 16px;"></div>
   </div>
   <script>
     window.__pageClicks = 0;
     document.addEventListener('click', () => { window.__pageClicks += 1; });
+
+    // Hand-written React fibers: enough shape for the guest to walk (type, return,
+    // _debugSource) without pulling React into the test suite.
+    (function () {
+      const root = { type: null, return: null, _debugSource: null };
+      function App() {}
+      function Toolbar() {}
+      function Ab() {}
+      const app = { type: App, return: root };
+      const toolbar = {
+        type: Toolbar,
+        return: app,
+        _debugSource: { fileName: 'webpack-internal:///./src/components/Toolbar.tsx', lineNumber: 42, columnNumber: 7 },
+      };
+      const button = {
+        type: 'button',
+        return: toolbar,
+        _debugSource: { fileName: 'webpack-internal:///./src/components/Toolbar.tsx', lineNumber: 42, columnNumber: 7 },
+      };
+      document.querySelector('[data-testid="reanalyze"]').__reactFiber$test = button;
+
+      const orphan = {
+        type: 'div',
+        return: root,
+        _debugSource: { fileName: 'vite:///src/pages/Dashboard.vue', lineNumber: 8, columnNumber: 1 },
+      };
+      document.querySelector('#source-only').__reactFiber$test = orphan;
+
+      const minified = { type: Ab, return: root, _debugSource: { fileName: './src/widgets/Chart.jsx', lineNumber: 5 } };
+      document.querySelector('#minified-name').__reactFiber$test = { type: 'div', return: minified };
+    })();
   </script>
 </body>
 </html>

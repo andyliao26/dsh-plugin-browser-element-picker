@@ -66,12 +66,12 @@ imports. The host row exists only so `dsh-client-modules` has something to attac
 
 | Step | Location |
 | --- | --- |
-| Toolbar button, fallback, self-heal | `install()` in `lib/client.js` (~1348) |
-| Resolve owning Session / fill / send | `inject()` (~1475) |
+| Toolbar button, fallback, self-heal | `install()` in `lib/client.js` (~1645) |
+| Resolve owning Session / fill / send | `inject()` (~1772) |
 | Guest session (pick, card, design mode, keys) | `guestAnnotate()` (~155) |
-| Serialize guest + localized copy | `annotateScript()` (~1228) |
-| Prompt block text | `formatAnnotation()` (~1297) |
-| Plugin entry, locale registration | `apply()` (~1696) |
+| Serialize guest + localized copy | `annotateScript()` (~1424) |
+| Prompt block text | `formatAnnotation()` (~1491) |
+| Plugin entry, locale registration | `apply()` (~2015) |
 
 ## Contracts that must not break
 
@@ -105,12 +105,14 @@ matching balanced braces from the literal text `function guestAnnotate(`.
 - Namespace is `browser-element-picker`; the two dictionaries must keep identical
   key sets (asserted), and every user-facing string goes through `t()`.
 - `formatAnnotation()` fills `{placeholders}` from the dictionaries.
-  `bundle-contract` asserts the exact parameter names for `prompt.headerMany`,
-  `prompt.page`, `prompt.target`, `prompt.ambiguous`, `prompt.designChange`, and
-  `prompt.comment`: change a template and the assertion, or keep the names stable.
-- Quote mode and plain-text fallback render the same block; there is no
-  `prompt.fillSuffix` and no trailing `修改要求：` line. Do not reintroduce one
-  without a spec change.
+  `bundle-contract` asserts the exact parameter names for `prompt.page`,
+  `prompt.target`, `prompt.ambiguous`, `prompt.react`, `prompt.reactAt`,
+  `prompt.designChange`, and `prompt.comment`: change a template and the
+  assertion, or keep the names stable.
+- Quote mode and plain-text fallback render the same block; the request section
+  lives inside that block and appears exactly once. There is no `prompt.fillSuffix`
+  and nothing is appended after the block. Do not reintroduce either without a
+  spec change.
 
 ### 4. Guest session result and injection precedence
 
@@ -119,12 +121,20 @@ The guest resolves exactly one of:
 ```js
 { ok: true, submit: boolean,
   page: { url, title, width, height, scrollX, scrollY },
-  targets: [{ tag, selector, matches, text, html, attrs, styles[], rect, docRect }],
+  targets: [{ tag, selector, matches, react, text, html, attrs, styles[], rect, docRect }],
   comment: string,
   design: [{ index, selector, changes: [{ property, from, to }] }] }
 
 { ok: false, reason: "cancel" }   // also the only "nothing to write" signal
 ```
+
+`targets[].react` is `{ component, source }` or `null`. `component` is the nearest
+function component name found by walking `fiber.return` (wrappers and one or two
+character minified names rejected); `source` is `path:line` normalized from
+`_debugSource` / `__source` with bundler prefixes and query strings stripped. A
+source without a component name is dropped — the pair is useless without knowing
+what it belongs to. Both fields only exist on development builds; production
+pages must report `null`, never a placeholder.
 
 Design deltas are stored per element (a parallel array kept in step with
 `targets`), not by array index; removing a target removes its deltas, and
@@ -135,9 +145,13 @@ field and blurring resets it to that baseline, not to the last committed value.
 `formatAnnotation()` renders each delta as an indented
 `property: from → to` line under its target, below a `设计：` header.
 
-The prompt block is: header, one `页面：{title} | {url}` line, numbered targets
-`{index}. {selector}[（匹配 N）] | <{tag}> {text}`, nested design lines, an
-optional `要求：`, and the footer. It deliberately carries no computed styles,
+The prompt block is: one `页面：{title} | {url}` line, numbered targets
+`{index}. {selector}[（匹配 N）] | <{tag}> {text}`, an optional
+`组件：{component} {source}` subline, nested design lines, and — only when a
+comment exists — a blank line, `---`, and `**修改要求:** {comment}`. There is no
+header and no footer; the block carries no instruction the user did not type.
+The blank line before `---` is required, or markdown reads the rule as a setext
+heading under the previous line. It deliberately carries no computed styles,
 outer HTML, geometry, viewport, scroll position, or per-unique-target match
 count. Do not re-add those without a spec change. `formatAnnotation(t, result)`
 has no quote flag; the quote-node path and the plain-text fallback share it.

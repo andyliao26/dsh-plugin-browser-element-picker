@@ -669,6 +669,32 @@ await keyInCard("Enter");
 await sleep(80);
 const byAttribute = await evaluate(client, "window.__r");
 assert.equal(byAttribute.targets[0].selector, 'button[data-testid="reanalyze"]', "a stable data-* attribute beats hashed classes");
+assert.deepEqual(
+  byAttribute.targets[0].react,
+  { component: "Toolbar", source: "src/components/Toolbar.tsx:42" },
+  "component and source come from the fiber chain",
+);
+
+assert.equal(await evaluate(client, START), "started");
+await clickPage("#first");
+await keyInCard("Enter");
+await sleep(80);
+const noMetadata = await evaluate(client, "window.__r");
+assert.equal(noMetadata.targets[0].react, null, "a page without React metadata reports no identity");
+
+assert.equal(await evaluate(client, START), "started");
+await clickPage("#source-only");
+await keyInCard("Enter");
+await sleep(80);
+const sourceOnly = await evaluate(client, "window.__r");
+assert.equal(sourceOnly.targets[0].react, null, "a source location without a component name is dropped");
+
+assert.equal(await evaluate(client, START), "started");
+await clickPage("#minified-name");
+await keyInCard("Enter");
+await sleep(80);
+const minified = await evaluate(client, "window.__r");
+assert.equal(minified.targets[0].react, null, "a minified component name is rejected");
 
 assert.equal(await evaluate(client, START), "started");
 await clickPage("._label_4f8c");
@@ -678,6 +704,23 @@ const byFallback = await evaluate(client, "window.__r");
 const fallbackSelector = byFallback.targets[0].selector;
 assert.equal(fallbackSelector.includes("_label_"), false, "a generated class is dropped");
 assert.match(fallbackSelector, / span$/, "the generated class falls back to the element path");
+
+assert.equal(await evaluate(client, START), "started");
+await clickPage("div.flex.items-center");
+await keyInCard("Enter");
+await sleep(80);
+const utilityOnly = await evaluate(client, "window.__r");
+const utilitySelector = utilityOnly.targets[0].selector;
+assert.equal(/\.(flex|items-center|gap-2)\b/.test(utilitySelector), false, "utility class names are dropped");
+
+assert.equal(await evaluate(client, START), "started");
+await clickPage("div.order-card");
+await keyInCard("Enter");
+await sleep(80);
+const mixedClasses = await evaluate(client, "window.__r");
+const mixedSelector = mixedClasses.targets[0].selector;
+assert.match(mixedSelector, /\.order-card/, "a semantic class survives");
+assert.equal(/\.(flex|p-4)\b/.test(mixedSelector), false, "utilities next to it are dropped");
 
 client.close();
 chrome.kill("SIGKILL");

@@ -103,25 +103,26 @@ for (const key of keys) assert.ok(registered[0][1].zh[key].length > 0 && registe
 // Every prompt placeholder the formatter fills must exist in the template that
 // uses it, so a renamed key cannot silently ship a literal "{selector}".
 const zhDict = registered[0][1].zh;
-const needed = ["prompt.headerSingle", "prompt.headerMany", "prompt.page", "prompt.target",
-  "prompt.ambiguous", "prompt.designHeader", "prompt.designChange", "prompt.comment",
-  "prompt.designFallback", "prompt.footer", "prompt.emptyText"];
+const needed = ["prompt.page", "prompt.target", "prompt.ambiguous", "prompt.react",
+  "prompt.reactAt", "prompt.designHeader", "prompt.designChange", "prompt.comment", "prompt.emptyText"];
 for (const key of needed) assert.ok(typeof zhDict[key] === "string" && zhDict[key].length > 0, `prompt key ${key}`);
 
 // The compact format no longer ships the verbose evidence or a plain-text suffix.
 for (const key of ["prompt.selector", "prompt.element", "prompt.geometry", "prompt.styles",
-  "prompt.html", "prompt.designHeaderMany", "prompt.footerSingle", "prompt.footerMany", "prompt.fillSuffix"]) {
+  "prompt.html", "prompt.designHeaderMany", "prompt.footerSingle", "prompt.footerMany", "prompt.fillSuffix",
+  "prompt.headerSingle", "prompt.headerMany", "prompt.footer", "prompt.designFallback"]) {
   assert.equal(zhDict[key], undefined, `removed prompt key ${key}`);
 }
 
 const placeholders = (key) => new Set([...zhDict[key].matchAll(/\{(\w+)\}/g)].map((match) => match[1]));
-assert.deepEqual([...placeholders("prompt.headerMany")].sort(), ["count"]);
 assert.deepEqual([...placeholders("prompt.page")].sort(), ["title", "url"]);
 assert.deepEqual([...placeholders("prompt.target")].sort(), ["ambiguous", "index", "selector", "tag", "text"]);
 assert.deepEqual([...placeholders("prompt.ambiguous")].sort(), ["matches"]);
 assert.deepEqual([...placeholders("prompt.designChange")].sort(), ["from", "property", "to"]);
 assert.deepEqual([...placeholders("prompt.comment")].sort(), ["comment"]);
-for (const key of ["prompt.headerSingle", "prompt.designHeader", "prompt.designFallback", "prompt.footer", "prompt.emptyText"]) {
+assert.deepEqual([...placeholders("prompt.react")].sort(), ["component"]);
+assert.deepEqual([...placeholders("prompt.reactAt")].sort(), ["component", "source"]);
+for (const key of ["prompt.designHeader", "prompt.emptyText"]) {
   assert.equal(placeholders(key).size, 0, `no placeholders in ${key}`);
 }
 

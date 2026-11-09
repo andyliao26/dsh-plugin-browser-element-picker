@@ -44,9 +44,10 @@ assert.equal(payload.ok, true, "the guest session finished");
 // The descriptor has to carry every field the formatter reads.
 assert.deepEqual(
   Object.keys(payload.targets[0]).sort(),
-  ["attrs", "docRect", "html", "matches", "rect", "selector", "styles", "tag", "text"],
+  ["attrs", "docRect", "html", "matches", "react", "rect", "selector", "styles", "tag", "text"],
   "descriptor fields",
 );
+assert.equal(payload.targets[0].react, null, "a page without React metadata reports no identity");
 assert.ok(Array.isArray(payload.targets[0].styles) && payload.targets[0].styles.length > 0, "computed styles captured");
 assert.deepEqual(payload.design, [{
   index: 0,
@@ -164,14 +165,14 @@ assert.equal(quotes.length, 1, "one quote block was produced");
 const block = quotes[0];
 
 assert.equal(block.includes("undefined"), false, `no undefined leaks into the prompt:\n${block}`);
-assert.match(block, /^【页面标注】\n页面：拾取测试页 \| http:\/\/127\.0\.0\.1:\d+\//, "header and page line");
+assert.match(block, /^页面：拾取测试页 \| http:\/\/127\.0\.0\.1:\d+\//, "the page line starts the block");
 assert.match(block, /1\. #target \| <button> 提交订单/, "numbered target line");
 assert.match(block, /设计：\n {2}- width: 91\.3px → 466px/, "design delta nests under the target");
 assert.equal(block.includes("计算样式"), false, "no computed styles in the prompt");
 assert.equal(block.includes("外部 HTML"), false, "no HTML in the prompt");
 assert.equal(block.includes("位置"), false, "no geometry in the prompt");
 assert.equal(block.includes("[object Object]"), false, "no object leaks into the prompt");
-assert.match(block, /要求：按钮换成品牌绿/);
-assert.match(block, /保持选择器语义，说明修改文件。$/);
+assert.match(block, /\n\n---\n\*\*修改要求:\*\* 按钮换成品牌绿$/);
+assert.equal(block.slice(block.indexOf("---")).match(/修改要求/g).length, 1, "exactly one request label");
 
 console.log("payload contract OK");

@@ -183,17 +183,12 @@ const click = async () => {
 };
 const pageLine = "页面：订单列表 | http://localhost:5173/orders";
 const targetLine = "1. #app > div.list > button.btn.primary:nth-of-type(2) | <button> 提交订单";
-const footer = "保持选择器语义，说明修改文件。";
+// The request section is a delimiter line, a rule, then the user's own words.
+const request = (text) => `\n\n---\n**修改要求:** ${text}`;
 
 await click();
 assert.equal(quotes.length, 1);
-const single = [
-  "【页面标注】",
-  pageLine,
-  targetLine,
-  "要求：背景换成品牌绿",
-  footer,
-].join("\n");
+const single = [pageLine, targetLine].join("\n") + request("背景换成品牌绿");
 assert.equal(quotes[0], single, "single-target block matches the compact form");
 assert.equal(quotes[0].includes("计算样式"), false, "no computed styles in the prompt");
 assert.equal(quotes[0].includes("外部 HTML"), false, "no HTML in the prompt");
@@ -211,16 +206,11 @@ guestResult = {
 };
 await click();
 assert.equal(quotes.length, 2);
-assert.equal(quotes[1], [
-  "【页面标注】",
-  pageLine,
-  targetLine,
+assert.equal(quotes[1], [pageLine, targetLine,
   "设计：",
   "  - width: 120px → 466px",
   "  - border-radius: 8px → 12px",
-  "要求：背景换成品牌绿",
-  footer,
-].join("\n"), "design lines follow their target");
+].join("\n") + request("背景换成品牌绿"), "design lines follow their target");
 assert.equal(quotes[1].includes("[object Object]"), false, "design deltas are formatted, not stringified");
 
 // --- B. multiple annotations + request, design on the second ------------------------
@@ -234,16 +224,11 @@ guestResult = {
 };
 await click();
 assert.equal(quotes.length, 3);
-assert.equal(quotes[2], [
-  "【页面标注】2 个元素",
-  pageLine,
-  targetLine,
+assert.equal(quotes[2], [pageLine, targetLine,
   "2. #cancel | <button> 取消",
   "设计：",
   "  - border-radius: 8px → 12px",
-  "要求：两个按钮的高度统一为40px。",
-  footer,
-].join("\n"), "multi-target block keeps each delta under its element");
+].join("\n") + request("两个按钮的高度统一为40px。"), "multi-target block keeps each delta under its element");
 
 // --- ambiguous selector keeps the match marker --------------------------------------
 guestResult = {
@@ -266,30 +251,45 @@ guestResult = {
 };
 await click();
 assert.equal(quotes.length, 5);
-assert.equal(quotes[4], [
-  "【页面标注】",
-  pageLine,
-  targetLine,
+assert.equal(quotes[4], [pageLine, targetLine,
   "设计：",
   "  - width: 120px → 466px",
-  "要求：按上述设计调整修改。",
-  footer,
-].join("\n"), "design-only sessions get the fallback request");
+].join("\n"), "a design-only block ends on its last delta line");
 
 // --- empty comment and no design ----------------------------------------------------
 guestResult = { ...BASE, comment: "", design: [] };
 await click();
 assert.equal(quotes.length, 6);
-assert.equal(quotes[5], ["【页面标注】", pageLine, targetLine].join("\n"), "a bare location block has no request or footer");
+assert.equal(quotes[5], [pageLine, targetLine].join("\n"), "a bare location block has no separator and no request");
+
+// --- component identity nests under its target --------------------------------------
+guestResult = {
+  ...BASE,
+  targets: [
+    { ...BASE.targets[0], react: { component: "Toolbar", source: "src/components/Toolbar.tsx:42" } },
+    { ...BASE.targets[0], selector: "#cancel", text: "取消", react: { component: "Toolbar", source: "" } },
+    { ...BASE.targets[0], selector: "#more", text: "更多", react: null },
+  ],
+  design: [],
+  comment: "",
+};
+await click();
+assert.equal(quotes.length, 7);
+assert.equal(quotes[6], [pageLine, targetLine,
+  "组件：Toolbar src/components/Toolbar.tsx:42",
+  "2. #cancel | <button> 取消",
+  "组件：Toolbar",
+  "3. #more | <button> 更多",
+].join("\n"), "each target carries its own component line, or none");
 
 // --- fallback: no quote support, identical plain text --------------------------------
 quoteAccepted = false;
 guestResult = { ...BASE, submit: false, design: [], comment: "背景换成品牌绿" };
 await click();
-assert.equal(quotes.length, 6, "no quote block was added");
+assert.equal(quotes.length, 7, "no quote block was added");
 assert.equal(drafts.length, 1, "plain draft fallback");
 assert.equal(drafts[0].prompt, single, "plain-text fallback matches the quote block");
-assert.equal(drafts[0].prompt.includes("修改要求"), false, "no empty request suffix");
+assert.equal(drafts[0].prompt.endsWith("**修改要求:** 背景换成品牌绿"), true, "the request appears once, at the end");
 
 // --- reference chip: short label, full block in the codec -----------------------------
 assert.equal(sources.length, 1, "the annotation reference source registers once");
@@ -302,7 +302,7 @@ quoteAccepted = true;
 guestResult = { ...BASE, submit: false, design: [], comment: "背景换成品牌绿" };
 await click();
 assert.equal(references.length, 1, "the chip path wins over the quote node");
-assert.equal(quotes.length, 6, "no quote block was appended for the chip path");
+assert.equal(quotes.length, 7, "no quote block was appended for the chip path");
 const chip = references[0].ref;
 assert.equal(chip.source, "browser-element-picker");
 assert.equal(chip.label, "<button> 背景换成品牌绿", "the chip shows the user's own text");
@@ -319,18 +319,18 @@ guestResult = {
 await click();
 assert.equal(references.length, 2);
 assert.equal(references[1].ref.label, "<button> 等 2 项 · 两个按钮的高度统一为40px。", "multi-target chip carries the count and the comment");
-assert.match(references[1].ref.ref, /^【页面标注】2 个元素\n/);
+assert.match(references[1].ref.ref, /^页面：订单列表 \| http:\/\/localhost:5173\/orders\n/);
 
 referenceAccepted = false;
 guestResult = { ...BASE, submit: false, design: [], comment: "背景换成品牌绿" };
 await click();
 assert.equal(references.length, 2, "a refused chip inserts nothing");
-assert.equal(quotes.length, 7, "a refused chip falls back to the quote node");
+assert.equal(quotes.length, 8, "a refused chip falls back to the quote node");
 
 // --- cancellation writes nothing ------------------------------------------------------
 guestResult = { ok: false, reason: "cancel" };
 await click();
-assert.equal(quotes.length, 7, "a cancelled session leaves the composer alone");
+assert.equal(quotes.length, 8, "a cancelled session leaves the composer alone");
 assert.equal(drafts.length, 1);
 
 // --- teardown -------------------------------------------------------------------------

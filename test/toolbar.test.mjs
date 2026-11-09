@@ -183,12 +183,12 @@ assert.equal(drafts.length, 0, "the annotation rides as a quote block, not as pl
 assert.equal(quotes.length, 1, "exactly one quote block");
 const block = quotes[0];
 assert.equal(block, [
-  "【页面标注】",
   "页面：登录 | http://localhost:5173/login",
   "1. #login | <button> 登录",
-  "要求：按钮换成深绿",
-  "保持选择器语义，说明修改文件。",
-].join("\n"), "compact single-target block");
+  "",
+  "---",
+  "**修改要求:** 按钮换成深绿",
+].join("\n"), "the page line starts the block, the request closes it");
 assert.equal(block.includes("计算样式"), false, "no computed styles in the block");
 assert.equal(block.includes("外部 HTML"), false, "no HTML in the block");
 assert.equal(submissions.length, 0, "Enter does not send");
@@ -213,15 +213,15 @@ assert.equal(quotes.length, 2, "each session adds one block");
 assert.equal(submissions.length, 1, "Cmd+Enter reaches the composer submit action");
 assert.equal(submissions[0], "queue", "the default delivery mode");
 assert.equal(quotes[1], [
-  "【页面标注】2 个元素",
   "页面：登录 | http://localhost:5173/login",
   "1. #login | <button> 登录",
   "2. .hint | <span> 忘记密码",
   "设计：",
   "  - color: #101828 → #112233",
   "  - font-size: 14px → 12px",
-  "要求：按钮换成深绿",
-  "保持选择器语义，说明修改文件。",
+  "",
+  "---",
+  "**修改要求:** 按钮换成深绿",
 ].join("\n"), "multi-target block nests the design deltas");
 
 // --- fallback: a composer that refuses the quote node gets plain text ----------------
@@ -233,7 +233,7 @@ assert.equal(quotes.length, 2, "no quote block was added");
 assert.equal(drafts.length, 1, "the annotation fell back to plain draft text");
 assert.equal(drafts[0].whenDraftExists, "append");
 assert.equal(drafts[0].prompt, quotes[1], "the plain fallback matches the multi-target quote block");
-assert.equal(drafts[0].prompt.includes("修改要求"), false, "no empty request suffix");
+assert.equal(drafts[0].prompt.split("**修改要求:**").length - 1, 1, "the request section appears exactly once");
 
 // --- teardown ------------------------------------------------------------------------
 for (const disposer of disposers) disposer();
