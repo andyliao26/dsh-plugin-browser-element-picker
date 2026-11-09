@@ -82,20 +82,6 @@ Design deltas SHALL stay associated with the element they describe regardless of
 - **WHEN** a selected element is removed from the page before the annotation session finishes
 - **THEN** the session result omits that target and its design deltas
 
-### Requirement: Prompt renders design intent one property per line
-
-For every target with deltas, the annotation block SHALL include a design header followed by one indented line per property in the form `property: from → to`. For multiple targets, the header SHALL name the target's position in the selection.
-
-#### Scenario: Single target with several properties
-- **WHEN** one element has `justify-content: center → flex-end` and `width: 91.3px → 466px`
-- **THEN** the block contains a design header line
-- **AND** it contains two indented lines, one per property, in that form
-
-#### Scenario: Multiple targets get separate headers
-- **WHEN** the third selected element has one design delta
-- **THEN** its header names the third element
-- **AND** its property lines are indented under that header
-
 ### Requirement: Comment card shows committed intent and reopens the panel
 
 The comment card SHALL list the committed design deltas of the active element and SHALL provide a control that reopens the design panel for that same element. Discarded drafts SHALL NOT be shown.

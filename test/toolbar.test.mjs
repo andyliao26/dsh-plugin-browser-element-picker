@@ -182,12 +182,15 @@ await new Promise((resolve) => setTimeout(resolve, 0));
 assert.equal(drafts.length, 0, "the annotation rides as a quote block, not as plain text");
 assert.equal(quotes.length, 1, "exactly one quote block");
 const block = quotes[0];
-assert.match(block, /^【页面标注】/, "annotation header");
-assert.match(block, /- 选择器：#login（页面内匹配 1 个元素）/, "selector line");
-assert.match(block, /- 元素：<button> 登录/, "element line");
-assert.match(block, /- 我的意见：按钮换成深绿/, "comment line");
-assert.match(block, /说明改了哪些文件。$/, "block ends with the instruction sentence");
-assert.equal(block.includes("修改要求"), false, "the block leaves the request line to the person");
+assert.equal(block, [
+  "【页面标注】",
+  "页面：登录 | http://localhost:5173/login",
+  "1. #login | <button> 登录",
+  "要求：按钮换成深绿",
+  "保持选择器语义，说明修改文件。",
+].join("\n"), "compact single-target block");
+assert.equal(block.includes("计算样式"), false, "no computed styles in the block");
+assert.equal(block.includes("外部 HTML"), false, "no HTML in the block");
 assert.equal(submissions.length, 0, "Enter does not send");
 assert.equal(button.attributes["aria-pressed"], "false", "the session state cleared");
 
@@ -209,10 +212,17 @@ await new Promise((resolve) => setTimeout(resolve, 0));
 assert.equal(quotes.length, 2, "each session adds one block");
 assert.equal(submissions.length, 1, "Cmd+Enter reaches the composer submit action");
 assert.equal(submissions[0], "queue", "the default delivery mode");
-assert.match(quotes[1], /^【页面标注】共 2 个元素/, "multi-target header");
-assert.match(quotes[1], /1\. <button> 登录 — #login/, "first target line");
-assert.match(quotes[1], /2\. <span> 忘记密码 — \.hint/, "second target line");
-assert.match(quotes[1], /- 设计调整（第 2 个元素）：\n {2}- color: #101828 → #112233\n {2}- font-size: 14px → 12px/, "design deltas");
+assert.equal(quotes[1], [
+  "【页面标注】2 个元素",
+  "页面：登录 | http://localhost:5173/login",
+  "1. #login | <button> 登录",
+  "2. .hint | <span> 忘记密码",
+  "设计：",
+  "  - color: #101828 → #112233",
+  "  - font-size: 14px → 12px",
+  "要求：按钮换成深绿",
+  "保持选择器语义，说明修改文件。",
+].join("\n"), "multi-target block nests the design deltas");
 
 // --- fallback: a composer that refuses the quote node gets plain text ----------------
 quoteAccepted = false;
@@ -222,7 +232,8 @@ await new Promise((resolve) => setTimeout(resolve, 0));
 assert.equal(quotes.length, 2, "no quote block was added");
 assert.equal(drafts.length, 1, "the annotation fell back to plain draft text");
 assert.equal(drafts[0].whenDraftExists, "append");
-assert.match(drafts[0].prompt, /修改要求：$/, "the plain fallback keeps the request lead-in");
+assert.equal(drafts[0].prompt, quotes[1], "the plain fallback matches the multi-target quote block");
+assert.equal(drafts[0].prompt.includes("修改要求"), false, "no empty request suffix");
 
 // --- teardown ------------------------------------------------------------------------
 for (const disposer of disposers) disposer();

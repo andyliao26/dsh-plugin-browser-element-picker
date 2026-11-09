@@ -103,25 +103,27 @@ for (const key of keys) assert.ok(registered[0][1].zh[key].length > 0 && registe
 // Every prompt placeholder the formatter fills must exist in the template that
 // uses it, so a renamed key cannot silently ship a literal "{selector}".
 const zhDict = registered[0][1].zh;
-const needed = ["prompt.headerSingle", "prompt.headerMany", "prompt.page", "prompt.selector", "prompt.element",
-  "prompt.geometry", "prompt.styles", "prompt.html", "prompt.target", "prompt.designHeader", "prompt.designHeaderMany",
-  "prompt.designChange", "prompt.comment", "prompt.footerSingle", "prompt.footerMany", "prompt.emptyText"];
+const needed = ["prompt.headerSingle", "prompt.headerMany", "prompt.page", "prompt.target",
+  "prompt.ambiguous", "prompt.designHeader", "prompt.designChange", "prompt.comment",
+  "prompt.designFallback", "prompt.footer", "prompt.emptyText"];
 for (const key of needed) assert.ok(typeof zhDict[key] === "string" && zhDict[key].length > 0, `prompt key ${key}`);
-const singleParams = new Set();
-for (const match of zhDict["prompt.selector"].matchAll(/\{(\w+)\}/g)) singleParams.add(match[1]);
-assert.deepEqual([...singleParams].sort(), ["matches", "selector"]);
-const geometryParams = new Set();
-for (const match of zhDict["prompt.geometry"].matchAll(/\{(\w+)\}/g)) geometryParams.add(match[1]);
-assert.deepEqual([...geometryParams].sort(), ["height", "sx", "sy", "vh", "vw", "width", "x", "y"]);
-const targetParams = new Set();
-for (const match of zhDict["prompt.target"].matchAll(/\{(\w+)\}/g)) targetParams.add(match[1]);
-assert.deepEqual([...targetParams].sort(), ["index", "selector", "tag", "text"]);
-const designHeaderParams = new Set();
-for (const match of zhDict["prompt.designHeaderMany"].matchAll(/\{(\w+)\}/g)) designHeaderParams.add(match[1]);
-assert.deepEqual([...designHeaderParams].sort(), ["index"]);
-const designChangeParams = new Set();
-for (const match of zhDict["prompt.designChange"].matchAll(/\{(\w+)\}/g)) designChangeParams.add(match[1]);
-assert.deepEqual([...designChangeParams].sort(), ["from", "property", "to"]);
+
+// The compact format no longer ships the verbose evidence or a plain-text suffix.
+for (const key of ["prompt.selector", "prompt.element", "prompt.geometry", "prompt.styles",
+  "prompt.html", "prompt.designHeaderMany", "prompt.footerSingle", "prompt.footerMany", "prompt.fillSuffix"]) {
+  assert.equal(zhDict[key], undefined, `removed prompt key ${key}`);
+}
+
+const placeholders = (key) => new Set([...zhDict[key].matchAll(/\{(\w+)\}/g)].map((match) => match[1]));
+assert.deepEqual([...placeholders("prompt.headerMany")].sort(), ["count"]);
+assert.deepEqual([...placeholders("prompt.page")].sort(), ["title", "url"]);
+assert.deepEqual([...placeholders("prompt.target")].sort(), ["ambiguous", "index", "selector", "tag", "text"]);
+assert.deepEqual([...placeholders("prompt.ambiguous")].sort(), ["matches"]);
+assert.deepEqual([...placeholders("prompt.designChange")].sort(), ["from", "property", "to"]);
+assert.deepEqual([...placeholders("prompt.comment")].sort(), ["comment"]);
+for (const key of ["prompt.headerSingle", "prompt.designHeader", "prompt.designFallback", "prompt.footer", "prompt.emptyText"]) {
+  assert.equal(placeholders(key).size, 0, `no placeholders in ${key}`);
+}
 
 // Dispose everything; no throw.
 for (const dispose of effects) if (typeof dispose === "function") dispose();

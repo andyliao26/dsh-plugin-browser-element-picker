@@ -164,15 +164,14 @@ assert.equal(quotes.length, 1, "one quote block was produced");
 const block = quotes[0];
 
 assert.equal(block.includes("undefined"), false, `no undefined leaks into the prompt:\n${block}`);
-assert.match(block, /^【页面标注】/);
-assert.match(block, /- 选择器：#target（页面内匹配 1 个元素）/);
-assert.match(block, /- 元素：<button> 提交订单/);
-assert.match(block, /- 位置：左 \d+、上 \d+，尺寸 \d+×\d+；页面视口 \d+×\d+，滚动 \(\d+, \d+\)/);
-assert.match(block, /- 计算样式：[^;\n]+: /, "computed styles are rendered from the real descriptor");
-assert.match(block, /- 外部 HTML：<button[^>]*>提交订单<\/button>/);
-assert.match(block, /- 设计调整：\n {2}- width: 91\.3px → 466px/, "design delta is formatted line by line");
+assert.match(block, /^【页面标注】\n页面：拾取测试页 \| http:\/\/127\.0\.0\.1:\d+\//, "header and page line");
+assert.match(block, /1\. #target \| <button> 提交订单/, "numbered target line");
+assert.match(block, /设计：\n {2}- width: 91\.3px → 466px/, "design delta nests under the target");
+assert.equal(block.includes("计算样式"), false, "no computed styles in the prompt");
+assert.equal(block.includes("外部 HTML"), false, "no HTML in the prompt");
+assert.equal(block.includes("位置"), false, "no geometry in the prompt");
 assert.equal(block.includes("[object Object]"), false, "no object leaks into the prompt");
-assert.match(block, /- 我的意见：按钮换成品牌绿/);
-assert.match(block, /说明改了哪些文件。$/);
+assert.match(block, /要求：按钮换成品牌绿/);
+assert.match(block, /保持选择器语义，说明修改文件。$/);
 
 console.log("payload contract OK");

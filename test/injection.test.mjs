@@ -148,24 +148,31 @@ assert.equal(root.style.right, "508px", "pinned inside the guest right edge");
 assert.equal(root.children[1].attributes["aria-label"], "标注页面元素");
 assert.equal(root.children[1].attributes["aria-pressed"], "false");
 
-// --- fill ---------------------------------------------------------------------------
-root.children[1].listeners.get("click")[0]({ preventDefault() {}, stopPropagation() {} });
-await new Promise((resolve) => setTimeout(resolve, 0));
-assert.equal(drafts.length, 0, "quote block preferred over plain text");
-assert.equal(quotes.length, 1);
-const prompt = quotes[0];
-assert.match(prompt, /^【页面标注】/);
-assert.match(prompt, /- 页面：订单列表（http:\/\/localhost:5173\/orders）/);
-assert.match(prompt, /- 选择器：#app > div\.list > button\.btn\.primary:nth-of-type\(2\)（页面内匹配 1 个元素）/);
-assert.match(prompt, /- 元素：<button> 提交订单/);
-assert.match(prompt, /- 位置：左 512、上 340，尺寸 120×36；页面视口 1440×900，滚动 \(0, 120\)/);
-assert.match(prompt, /- 计算样式：display: inline-flex; background-color: rgb\(64, 86, 255\)/);
-assert.match(prompt, /- 我的意见：背景换成品牌绿/);
-assert.match(prompt, /说明改了哪些文件。$/);
-assert.equal(prompt.includes("修改要求"), false, "the quote block has no request lead-in");
-assert.equal(prompt.includes("设计调整"), false, "no design line without design edits");
+// --- A. single annotation + request -------------------------------------------------
+const click = async () => {
+  root.children[1].listeners.get("click")[0]({ preventDefault() {}, stopPropagation() {} });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+};
+const pageLine = "页面：订单列表 | http://localhost:5173/orders";
+const targetLine = "1. #app > div.list > button.btn.primary:nth-of-type(2) | <button> 提交订单";
+const footer = "保持选择器语义，说明修改文件。";
 
-// --- design delta on a single target -------------------------------------------------
+await click();
+assert.equal(quotes.length, 1);
+const single = [
+  "【页面标注】",
+  pageLine,
+  targetLine,
+  "要求：背景换成品牌绿",
+  footer,
+].join("\n");
+assert.equal(quotes[0], single, "single-target block matches the compact form");
+assert.equal(quotes[0].includes("计算样式"), false, "no computed styles in the prompt");
+assert.equal(quotes[0].includes("外部 HTML"), false, "no HTML in the prompt");
+assert.equal(quotes[0].includes("位置"), false, "no geometry in the prompt");
+assert.equal(quotes[0].includes("（匹配"), false, "a unique selector has no match marker");
+
+// --- C. design deltas nest under their target ---------------------------------------
 guestResult = {
   ...guestResult,
   design: [{ index: 0, selector: "ignored", changes: [
@@ -174,26 +181,93 @@ guestResult = {
   ] }],
   submit: true,
 };
-root.children[1].listeners.get("click")[0]({ preventDefault() {}, stopPropagation() {} });
-await new Promise((resolve) => setTimeout(resolve, 0));
+await click();
 assert.equal(quotes.length, 2);
-assert.match(quotes[1], /- 设计调整：\n {2}- width: 120px → 466px\n {2}- border-radius: 8px → 12px/, "single-target design lines");
+assert.equal(quotes[1], [
+  "【页面标注】",
+  pageLine,
+  targetLine,
+  "设计：",
+  "  - width: 120px → 466px",
+  "  - border-radius: 8px → 12px",
+  "要求：背景换成品牌绿",
+  footer,
+].join("\n"), "design lines follow their target");
 assert.equal(quotes[1].includes("[object Object]"), false, "design deltas are formatted, not stringified");
+
+// --- B. multiple annotations + request, design on the second ------------------------
+guestResult = {
+  ...BASE,
+  targets: [BASE.targets[0], { ...BASE.targets[0], selector: "#cancel", text: "取消" }],
+  design: [{ index: 1, selector: "ignored", changes: [
+    { property: "border-radius", from: "8px", to: "12px" },
+  ] }],
+  comment: "两个按钮的高度统一为40px。",
+};
+await click();
+assert.equal(quotes.length, 3);
+assert.equal(quotes[2], [
+  "【页面标注】2 个元素",
+  pageLine,
+  targetLine,
+  "2. #cancel | <button> 取消",
+  "设计：",
+  "  - border-radius: 8px → 12px",
+  "要求：两个按钮的高度统一为40px。",
+  footer,
+].join("\n"), "multi-target block keeps each delta under its element");
+
+// --- ambiguous selector keeps the match marker --------------------------------------
+guestResult = {
+  ...BASE,
+  targets: [{ ...BASE.targets[0], matches: 3 }],
+  design: [],
+  comment: "把这一组按钮统一成次要按钮。",
+};
+await click();
+assert.equal(quotes.length, 4);
+assert.match(quotes[3], /1\. #app > div\.list > button\.btn\.primary:nth-of-type\(2\)（匹配 3） \| <button> 提交订单/);
+
+// --- empty comment: design-only fallback --------------------------------------------
+guestResult = {
+  ...BASE,
+  comment: "",
+  design: [{ index: 0, selector: "ignored", changes: [
+    { property: "width", from: "120px", to: "466px" },
+  ] }],
+};
+await click();
+assert.equal(quotes.length, 5);
+assert.equal(quotes[4], [
+  "【页面标注】",
+  pageLine,
+  targetLine,
+  "设计：",
+  "  - width: 120px → 466px",
+  "要求：按上述设计调整修改。",
+  footer,
+].join("\n"), "design-only sessions get the fallback request");
+
+// --- empty comment and no design ----------------------------------------------------
+guestResult = { ...BASE, comment: "", design: [] };
+await click();
+assert.equal(quotes.length, 6);
+assert.equal(quotes[5], ["【页面标注】", pageLine, targetLine].join("\n"), "a bare location block has no request or footer");
+
+// --- fallback: no quote support, identical plain text --------------------------------
+quoteAccepted = false;
+guestResult = { ...BASE, submit: false, design: [], comment: "背景换成品牌绿" };
+await click();
+assert.equal(quotes.length, 6, "no quote block was added");
+assert.equal(drafts.length, 1, "plain draft fallback");
+assert.equal(drafts[0].prompt, single, "plain-text fallback matches the quote block");
+assert.equal(drafts[0].prompt.includes("修改要求"), false, "no empty request suffix");
 
 // --- cancellation writes nothing ------------------------------------------------------
 guestResult = { ok: false, reason: "cancel" };
-root.children[1].listeners.get("click")[0]({ preventDefault() {}, stopPropagation() {} });
-await new Promise((resolve) => setTimeout(resolve, 0));
-assert.equal(quotes.length, 2, "a cancelled session leaves the composer alone");
-
-// --- fallback: no quote support, plain text still lands ---------------------------------
-quoteAccepted = false;
-guestResult = { ...BASE, submit: false, design: [] };
-root.children[1].listeners.get("click")[0]({ preventDefault() {}, stopPropagation() {} });
-await new Promise((resolve) => setTimeout(resolve, 0));
-assert.equal(quotes.length, 2);
-assert.equal(drafts.length, 1, "plain draft fallback");
-assert.match(drafts[0].prompt, /修改要求：$/, "fallback keeps the request lead-in");
+await click();
+assert.equal(quotes.length, 6, "a cancelled session leaves the composer alone");
+assert.equal(drafts.length, 1);
 
 // --- teardown -------------------------------------------------------------------------
 for (const disposer of disposers) disposer();

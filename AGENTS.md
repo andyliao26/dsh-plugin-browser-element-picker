@@ -65,12 +65,12 @@ imports. The host row exists only so `dsh-client-modules` has something to attac
 
 | Step | Location |
 | --- | --- |
-| Toolbar button, fallback, self-heal | `install()` in `lib/client.js` (~1299) |
-| Resolve owning Session / fill / send | `inject()` (~1435) |
-| Guest session (pick, card, design mode, keys) | `guestAnnotate()` (~167) |
-| Serialize guest + localized copy | `annotateScript()` (~1169) |
-| Prompt block text | `formatAnnotation()` (~1239) |
-| Plugin entry, locale registration | `apply()` (~1647) |
+| Toolbar button, fallback, self-heal | `install()` in `lib/client.js` (~1348) |
+| Resolve owning Session / fill / send | `inject()` (~1475) |
+| Guest session (pick, card, design mode, keys) | `guestAnnotate()` (~155) |
+| Serialize guest + localized copy | `annotateScript()` (~1228) |
+| Prompt block text | `formatAnnotation()` (~1297) |
+| Plugin entry, locale registration | `apply()` (~1696) |
 
 ## Contracts that must not break
 
@@ -104,12 +104,12 @@ matching balanced braces from the literal text `function guestAnnotate(`.
 - Namespace is `browser-element-picker`; the two dictionaries must keep identical
   key sets (asserted), and every user-facing string goes through `t()`.
 - `formatAnnotation()` fills `{placeholders}` from the dictionaries.
-  `bundle-contract` asserts the exact parameter names for `prompt.selector`,
-  `prompt.geometry`, `prompt.target`, and `prompt.designChange`: change a template
-  and the assertion, or keep the names stable.
-- Quote mode and plain-text mode share the block and differ only by
-  `prompt.fillSuffix` (plain mode appends a `修改要求：` line so the user can keep
-  typing). Preserve that difference.
+  `bundle-contract` asserts the exact parameter names for `prompt.headerMany`,
+  `prompt.page`, `prompt.target`, `prompt.ambiguous`, `prompt.designChange`, and
+  `prompt.comment`: change a template and the assertion, or keep the names stable.
+- Quote mode and plain-text fallback render the same block; there is no
+  `prompt.fillSuffix` and no trailing `修改要求：` line. Do not reintroduce one
+  without a spec change.
 
 ### 4. Guest session result and injection precedence
 
@@ -132,7 +132,14 @@ The design baseline is captured once per element (a second parallel array) and
 reused on every reopen, so `from` never drifts when the page changes; clearing a
 field and blurring resets it to that baseline, not to the last committed value.
 `formatAnnotation()` renders each delta as an indented
-`property: from → to` line under a per-target header.
+`property: from → to` line under its target, below a `设计：` header.
+
+The prompt block is: header, one `页面：{title} | {url}` line, numbered targets
+`{index}. {selector}[（匹配 N）] | <{tag}> {text}`, nested design lines, an
+optional `要求：`, and the footer. It deliberately carries no computed styles,
+outer HTML, geometry, viewport, scroll position, or per-unique-target match
+count. Do not re-add those without a spec change. `formatAnnotation(t, result)`
+has no quote flag; the quote-node path and the plain-text fallback share it.
 
 Host-side precedence in `inject()`, in order:
 
