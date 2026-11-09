@@ -1,0 +1,27 @@
+{
+  "name": "dsh-plugin-browser-element-picker",
+  "version": "0.2.2",
+  "description": "Codex-style page annotation for the Desktop sidebar browser: pick elements, comment, nudge styles, fill or send the prompt",
+  "license": "MIT",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/client.js",
+    "cordis.patch.yml"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  }
+}

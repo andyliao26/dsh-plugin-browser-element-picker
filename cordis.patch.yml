@@ -1,0 +1,11 @@
+# Bundle patch for dsh-plugin-browser-element-picker.
+#
+# One Host row with no configuration: its only job is to exist so that
+# `dsh-client-modules` can attach the package's browser half (`dsh.client`) to
+# it. Toggle this row through the profile patch when needed:
+#
+#   - id: browser-element-picker
+#     disabled: true
+- insert:
+    - id: browser-element-picker
+      name: 'dsh-plugin-browser-element-picker'

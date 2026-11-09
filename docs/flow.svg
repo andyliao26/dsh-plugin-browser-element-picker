@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="250" viewBox="0 0 920 250" role="img" aria-label="在侧边浏览器地址栏进入标注会话，多选元素、写评论、设计模式微调，再填入或直接发送到 Prompts Input">
+  <defs>
+    <style>
+      .bg { fill: #f7f8fa; }
+      .card { fill: #ffffff; stroke: #e3e6ec; stroke-width: 1.5; }
+      .step { fill: #eef1ff; stroke: #c9d1ff; stroke-width: 1.5; }
+      .dark { fill: #1b1b1e; stroke: #303038; stroke-width: 1.5; }
+      .title { font: 600 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif; fill: #101828; }
+      .titleLight { font: 600 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif; fill: #f4f4f6; }
+      .body { font: 11px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif; fill: #475467; }
+      .bodyLight { font: 11px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif; fill: #b9b9c3; }
+      .mono { font: 10px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; fill: #3538cd; }
+      .arrow { stroke: #98a2b3; stroke-width: 1.5; fill: none; }
+      .chip { fill: #101828; }
+      .chiptext { font: 10px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif; fill: #ffffff; }
+      .key { font: 10px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; fill: #667085; }
+    </style>
+    <marker id="a" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#98a2b3"/></marker>
+  </defs>
+
+  <rect x="0" y="0" width="920" height="250" rx="16" class="bg"/>
+
+  <rect x="20" y="70" width="180" height="112" rx="12" class="card"/>
+  <text x="38" y="98" class="title">地址栏准星</text>
+  <text x="38" y="120" class="body">浏览器标签页工具栏内嵌</text>
+  <rect x="38" y="132" width="96" height="20" rx="6" class="chip"/>
+  <text x="48" y="146" class="chiptext">28×28，主题变量</text>
+  <text x="38" y="168" class="key">Esc / 再点一次 取消</text>
+
+  <line x1="200" y1="126" x2="238" y2="126" class="arrow" marker-end="url(#a)"/>
+
+  <rect x="242" y="46" width="230" height="160" rx="12" class="dark"/>
+  <text x="260" y="72" class="titleLight">标注会话（页内）</text>
+  <text x="260" y="94" class="bodyLight">点击选中 · Shift 追加/移除</text>
+  <rect x="260" y="104" width="52" height="18" rx="5" fill="#26324a"/>
+  <text x="268" y="117" class="chiptext">heading</text>
+  <rect x="318" y="104" width="44" height="18" rx="5" fill="#26324a"/>
+  <text x="326" y="117" class="chiptext">span</text>
+  <rect x="368" y="104" width="54" height="18" rx="5" fill="#26324a"/>
+  <text x="376" y="117" class="chiptext">button</text>
+  <text x="260" y="142" class="bodyLight">评论卡片：直接写意见</text>
+  <text x="260" y="160" class="key">Enter 填入 · ⌘Enter 发送</text>
+  <text x="260" y="178" class="bodyLight">Esc 先退选择，再退会话</text>
+  <text x="260" y="196" class="key">页面点击被拦截，滚动照常</text>
+
+  <line x1="472" y1="126" x2="510" y2="126" class="arrow" marker-end="url(#a)"/>
+
+  <rect x="514" y="70" width="172" height="112" rx="12" class="step"/>
+  <text x="532" y="98" class="title">设计模式</text>
+  <text x="532" y="120" class="body">行内样式实时生效</text>
+  <text x="532" y="138" class="body">颜色 · 字号 · 圆角</text>
+  <text x="532" y="156" class="body">宽高 · 内外边距 · 布局</text>
+  <text x="532" y="174" class="key">取消还原 · 应用记 delta</text>
+
+  <line x1="686" y1="126" x2="724" y2="126" class="arrow" marker-end="url(#a)"/>
+
+  <rect x="728" y="70" width="172" height="112" rx="12" class="card"/>
+  <text x="746" y="98" class="title">Prompts Input</text>
+  <text x="746" y="120" class="body">多元素 → 逐条列出</text>
+  <text x="746" y="138" class="body">含选择器/几何/样式</text>
+  <text x="746" y="156" class="body">与设计 delta</text>
+  <rect x="746" y="164" width="128" height="20" rx="6" class="chip"/>
+  <text x="754" y="178" class="chiptext">⌘Enter → 直接发送</text>
+</svg>
