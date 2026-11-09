@@ -2,8 +2,8 @@
 
 Guidance for agents working on `dsh-plugin-browser-element-picker` — a single DSH
 bundle that adds Codex-style page annotation to the Desktop sidebar browser:
-pick elements → comment (optionally nudge inline styles) → Enter fills the prompt
-as a quote block, ⌘/Ctrl+Enter fills and sends.
+pick elements → comment (optionally record design adjustments) → Enter fills the
+prompt as a quote block, ⌘/Ctrl+Enter fills and sends.
 
 ## Project context
 
@@ -65,12 +65,12 @@ imports. The host row exists only so `dsh-client-modules` has something to attac
 
 | Step | Location |
 | --- | --- |
-| Toolbar button, fallback, self-heal | `install()` in `lib/client.js` (~1187) |
-| Resolve owning Session / fill / send | `inject()` (~1314) |
-| Guest session (pick, card, design mode, keys) | `guestAnnotate()` (~165) |
-| Serialize guest + localized copy | `annotateScript()` (~1062) |
-| Prompt block text | `formatAnnotation()` (~1132) |
-| Plugin entry, locale registration | `apply()` (~1535) |
+| Toolbar button, fallback, self-heal | `install()` in `lib/client.js` (~1299) |
+| Resolve owning Session / fill / send | `inject()` (~1435) |
+| Guest session (pick, card, design mode, keys) | `guestAnnotate()` (~167) |
+| Serialize guest + localized copy | `annotateScript()` (~1169) |
+| Prompt block text | `formatAnnotation()` (~1239) |
+| Plugin entry, locale registration | `apply()` (~1647) |
 
 ## Contracts that must not break
 
@@ -105,8 +105,8 @@ matching balanced braces from the literal text `function guestAnnotate(`.
   key sets (asserted), and every user-facing string goes through `t()`.
 - `formatAnnotation()` fills `{placeholders}` from the dictionaries.
   `bundle-contract` asserts the exact parameter names for `prompt.selector`,
-  `prompt.geometry`, and `prompt.target`: change a template and the assertion, or
-  keep the names stable.
+  `prompt.geometry`, `prompt.target`, and `prompt.designChange`: change a template
+  and the assertion, or keep the names stable.
 - Quote mode and plain-text mode share the block and differ only by
   `prompt.fillSuffix` (plain mode appends a `修改要求：` line so the user can keep
   typing). Preserve that difference.
@@ -120,10 +120,19 @@ The guest resolves exactly one of:
   page: { url, title, width, height, scrollX, scrollY },
   targets: [{ tag, selector, matches, text, html, attrs, styles[], rect, docRect }],
   comment: string,
-  design: [{ index, selector, changes: ["prop: value", ...] }] }
+  design: [{ index, selector, changes: [{ property, from, to }] }] }
 
 { ok: false, reason: "cancel" }   // also the only "nothing to write" signal
 ```
+
+Design deltas are stored per element (a parallel array kept in step with
+`targets`), not by array index; removing a target removes its deltas, and
+targets that are no longer connected are dropped when the session finishes.
+The design baseline is captured once per element (a second parallel array) and
+reused on every reopen, so `from` never drifts when the page changes; clearing a
+field and blurring resets it to that baseline, not to the last committed value.
+`formatAnnotation()` renders each delta as an indented
+`property: from → to` line under a per-target header.
 
 Host-side precedence in `inject()`, in order:
 
@@ -150,18 +159,22 @@ services. A cancelled session must write nothing.
 - The guest overlay lives in a shadow root on `[data-dsh-annotation]`; its events
   are captured on `window` and identified by `composedPath()` (keep new UI inside
   that shadow root). Page clicks are swallowed only during a session, and
-  cleanup must remove the host and `window.__dshAnnotationState` —
-  `CANCEL_SCRIPT` calls the latter to close a running session.
+  cleanup must remove the host, restore the page's original `cursor` /
+  `user-select`, and delete `window.__dshAnnotationState` — `CANCEL_SCRIPT`
+  calls the latter to close a running session.
 - Keyboard handling MUST ignore IME composition (`event.isComposing ||
-  event.keyCode === 229`). Escape walks back one step: design panel → card →
-  clear selection → end session.
+  event.keyCode === 229`). Enter on a focused button stays a native click, and a
+  page-level Enter while design mode is open must not finish the session. Escape
+  walks back one step: design panel → card → clear selection → end session.
 
 ### 6. Scope limits (do not over-claim)
 
 Desktop `webview` only (Web builds sandbox cross-origin pages, so injection is
 impossible); top-level document only — clicks inside iframes/Shadow DOM resolve to
-the host node; design mode writes inline `style.setProperty(..., "important")` and
-is reverted on cancel, never generating CSS files.
+the host node. Design mode never writes page styles: it snapshots computed styles
+into a string baseline, records `{property, from, to}` deltas, and only the
+prompt/card carry them. The panel body and the card's delta area scroll rather
+than growing past the viewport.
 
 ## Conventions
 

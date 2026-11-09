@@ -4,7 +4,7 @@
 
 ![流程](docs/flow.svg)
 
-| 评论卡片（Shift 多选 2 个元素） | 设计模式（16 项属性，实时生效） |
+| 评论卡片（Shift 多选 2 个元素） | 设计模式（16 项属性，回显并写入提示词） |
 | --- | --- |
 | ![标注卡片](docs/annotation-card.png) | ![设计模式](docs/design-mode.png) |
 
@@ -21,13 +21,13 @@
 | 输入评论 | 直接写，支持中文 IME；`Shift+Enter` 换行 |
 | **Enter** | 结束会话，把标注作为**引用块**填入输入框（不发送），光标落在块后，直接接着写要求 |
 | **⌘/Ctrl+Enter** | 同上，并**立即发送** |
-| 卡片上的滑块按钮 | 进入**设计模式**：对该元素做像素级样式调整 |
+| 卡片上的滑块按钮 | 进入**设计模式**：回显当前样式，记录调整（不改页面）；已应用的调整会在卡片里逐行列出 |
 | 设计模式里 `Enter` | 应用改动，回到卡片 |
 | `Esc` | 设计模式 → 放弃改动回到卡片；卡片打开 → 取消选择；都没有 → 退出会话 |
 
 ## 设计模式
 
-针对当前选中（chip 高亮）的那个元素，直接改它的**行内样式**并实时生效，同时把改动记进提示词：
+针对当前选中（chip 高亮）的那个元素，面板打开时读取一次当前 computed 样式作为基线并回显；之后的改动**不会作用到页面**，只记录成「从当前值到目标值」的调整，随提示词交给 Agent：
 
 - 文本颜色 / 背景 / 不透明度
 - 字号 / 字重
@@ -36,7 +36,9 @@
 - 内边距（上右下左）/ 外边距（上右下左）
 - 布局方向 / 分布 / 对齐 / 间距
 
-「取消」逐个还原进入设计模式前的行内样式；「应用」保留样式并把 delta 写进标注。设计模式只动行内样式，不生成 CSS 文件——它是"把想法量出来"，不是"替你做实现"。
+数值最多保留一位小数；`transparent` / 半透明颜色按原值回显；当前值不在下拉选项里（如非 flex 元素的 `normal`）时会补成当前选项。清空输入等于撤销该字段的调整；「取消」丢弃本次草稿，「应用」把调整挂到该元素，并在评论卡片里按行列出 `属性: 旧值 → 新值`。面板正文和卡片调整区都可以纵向滚动。
+
+单值控件的已知限制：圆角、边框颜色/宽度、间距各只有一个输入框；`from` 记录完整的 computed 简写（如四角不同、四边不同或双值 `gap`），输入框只回显首个数值，应用时按统一值表达。需要逐边调整时请在评论里说明。
 
 ## 注入的提示词
 
@@ -50,7 +52,9 @@
 - 位置：左 512、上 340，尺寸 120×36；页面视口 1440×900，滚动 (0, 0)
 - 计算样式：display: inline-flex; background-color: rgb(64, 86, 255); font-size: 14px; …
 - 外部 HTML：<button class="btn primary" data-testid="submit">提交订单</button>
-- 设计调整：width: 466px; border-radius: 12px
+- 设计调整：
+  - width: 91.3px → 466px
+  - border-radius: 8px → 12px
 - 我的意见：背景换成品牌绿
 
 请按上面的意见精确修改这个元素；落到源码时保持相同的选择器语义，并说明改了哪些文件。
@@ -66,13 +70,17 @@
 1. <h2> [验收] Chat分析 MSDS8页 — #app > main > h1.title
 2. <span> 修订 2 · 草稿 — #app > main > header > span:nth-of-type(2)
 3. <button> 保存草稿 — #app > main > header > div.actions > button:nth-of-type(1)
-- 设计调整（第 3 个元素）：border-radius: 12px; background-color: #2f4f45
+- 设计调整（第 3 个元素）：
+  - border-radius: 8px → 12px
+  - background-color: #4056ff → #2f4f45
 - 我的意见：这三个的间距和圆角统一一下，按钮用品牌绿
 
 请按上面的意见精确修改这些元素；落到源码时保持相同的选择器语义，并说明改了哪些文件。
 ```
 
 填入走 composer 原生的 `QuoteNode`（shell 的 `insertQuote`）：标注是输入框里一个可 `×` 移除的引用块，不是一个巨大的纯文本段落；连续标注会逐个追加成多个块，光标始终在最后一个块之后。若引用块不可用（例如输入框正忙或该会话的 composer 不接受），自动退化成纯文本追加，并在末尾补一行「修改要求：」。
+
+> **0.3.0 内部契约变化**：设计调整的提示词改为逐行排版（`属性: 旧值 → 新值`），guest 结果里的 `design[].changes` 从字符串数组变为 `{property, from, to}` 对象数组。只影响宿主侧格式化与仓库测试，不改变安装方式。
 
 ## 安装
 
@@ -93,7 +101,7 @@
 - **仅桌面端生效**。Web 形态的侧边浏览器用 `sandbox` iframe 承载跨域页面，宿主注入不进去；本插件只对 `webview` 生效。
 - 只覆盖顶层文档：Iframe 内部、Shadow DOM 内部的元素拾到的会是宿主节点。
 - 标注会话期间页面的点击会被拦截（滚动、悬停不受影响），这样点到链接不会跳走。
-- 设计模式改的是行内样式，刷新页面即消失；提示词记录的是"你调成了什么"，实现仍由模型落到源码。
+- 设计模式不修改页面：面板只回显当前样式并记录调整，提示词里是「旧值 → 新值」，实现仍由模型落到源码。
 - 一键发送走 `conversation.input.shellFor(binding).submit('queue')`，与输入框自己按下 Enter 是同一条提交事务。
 
 ## 原理
@@ -103,7 +111,7 @@
 | 按钮挂载 | `MutationObserver` 扫描 `webview[data-sidebar-browser-frame]`，向上找到「直接子节点含地址输入框」的工具栏行把按钮 `append` 进去；React 重渲染丢掉时下一帧 `sync` 补回。探测失败退回悬浮按钮 |
 | 标注会话 | 一次 `webview.executeJavaScript(guestAnnotate(...))` 承载整个会话：shadow DOM 里的评论卡片、设计面板、标注框；会话结束（Enter / ⌘Enter / Esc）才把结果 promise 交回宿主 |
 | 元素描述 | 选择器优先 `#id`，否则自底向上拼 `tag.class:nth-of-type(n)` 并用 `querySelectorAll` 验证唯一；同时采集文本、属性、视口/文档坐标、计算样式、outerHTML |
-| 设计模式 | 读 `getComputedStyle` 作为初值，改动写成 `style.setProperty(prop, value, 'important')`；进入时快照原值，「取消」还原，「应用」把 delta 记进会话结果 |
+| 设计模式 | 打开时把 `getComputedStyle` 落成字符串基线并回显；改动只进草稿、不写 DOM；「应用」把草稿转成 `{property, from, to}` delta 记进会话结果，卡片按行展示 |
 | 注入提示词 | 从 `webview.closest('[data-sidebar-right-session]')`（回退 `ctx.sidebarRight.mounted`）拿 Session，`conversation.input.shellFor(binding).insertQuote(block)` 插成引用块；失败时退回 `requestDraftInitialization(binding, { prompt, whenDraftExists: 'append' })` |
 | 直接发送 | 同一 binding 调 `conversation.input.shellFor(binding).submit('queue')`，与 composer 的 Enter 提交共用事务 |
 
@@ -123,24 +131,24 @@ sidebar-browser-element-picker/
 │   ├── index.js          # Host 半边：空 apply
 │   └── client.js         # 浏览器半边：工具栏按钮 + 标注会话 + 提示词
 ├── docs/flow.svg
-└── test/                 # 四层离线测试
+└── test/                 # 五层离线测试
 ```
 
 `lib/client.js` 是手写的 DSH 客户端 bundle（`window.__ModuleLoader__.load({ id, factory })`），刻意不引入 React 与任何依赖，因此也不需要仓库的 tsdown 构建链。
 
 ## 自检
 
-需要 Node ≥ 22；最后一个用本机 Playwright 缓存里的 Chromium headless shell。
+需要 Node ≥ 22；`guest-annotate` 与 `payload` 两个测试使用本机 Playwright 缓存里的 Chromium headless shell。
 
 ```bash
 cd dsh-plugins/sidebar-browser-element-picker
 node test/bundle-contract.test.mjs   # 模块注册契约、i18n 键位、提示词占位符
 node test/toolbar.test.mjs           # 工具栏内嵌、重渲染自愈、引用块与直接发送两条链路
 node test/injection.test.mjs         # 悬浮兜底路径、单/多元素块、取消不写入、文本兜底
-node test/guest-annotate.test.mjs    # 真实 Chromium：多选、卡片输入、设计模式、两种提交、Esc 回退
-node test/payload.test.mjs           # 端到端：真实描述符 → 真实格式化器，字段缺失/undefined 会当场失败
+node test/guest-annotate.test.mjs    # 真实 Chromium：多选、设计模式回显/零写入/from→to/滚动/键盘
+node test/payload.test.mjs           # 端到端：真实描述符 + 设计 delta → 真实格式化器，字段缺失/undefined 会当场失败
 ```
 
-`guest-annotate.test.mjs` 默认使用
+`guest-annotate.test.mjs` 与 `payload.test.mjs` 默认使用
 `~/Library/Caches/ms-playwright/chromium_headless_shell-1248/chrome-headless-shell-mac-arm64/chrome-headless-shell`，
 可用 `PICKER_CHROME=/path/to/chromium` 覆盖。

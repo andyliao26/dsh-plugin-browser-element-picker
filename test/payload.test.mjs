@@ -19,6 +19,15 @@ try {
   assert.equal(await page.evaluate(startSession(guest)), "started");
   await page.clickAt("#target");
   await page.evaluate(`(() => {
+    const sr = document.querySelector('[data-dsh-annotation]').shadowRoot;
+    sr.querySelector('[data-role="design"]').click();
+    const input = sr.querySelector('[data-field="width"] input');
+    input.value = "466";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    sr.querySelector('[data-role="design-apply"]').click();
+    return true;
+  })();`);
+  await page.evaluate(`(() => {
     const area = document.querySelector('[data-dsh-annotation]').shadowRoot.querySelector('[data-role="comment"]');
     area.value = "按钮换成品牌绿";
     area.dispatchEvent(new Event("input", { bubbles: true }));
@@ -39,6 +48,11 @@ assert.deepEqual(
   "descriptor fields",
 );
 assert.ok(Array.isArray(payload.targets[0].styles) && payload.targets[0].styles.length > 0, "computed styles captured");
+assert.deepEqual(payload.design, [{
+  index: 0,
+  selector: "#target",
+  changes: [{ property: "width", from: "91.3px", to: "466px" }],
+}], "the real guest hands structured design deltas to the host");
 
 // ---------------------------------------------------------------- 2. real host format
 class FakeNode {
@@ -156,6 +170,8 @@ assert.match(block, /- 元素：<button> 提交订单/);
 assert.match(block, /- 位置：左 \d+、上 \d+，尺寸 \d+×\d+；页面视口 \d+×\d+，滚动 \(\d+, \d+\)/);
 assert.match(block, /- 计算样式：[^;\n]+: /, "computed styles are rendered from the real descriptor");
 assert.match(block, /- 外部 HTML：<button[^>]*>提交订单<\/button>/);
+assert.match(block, /- 设计调整：\n {2}- width: 91\.3px → 466px/, "design delta is formatted line by line");
+assert.equal(block.includes("[object Object]"), false, "no object leaks into the prompt");
 assert.match(block, /- 我的意见：按钮换成品牌绿/);
 assert.match(block, /说明改了哪些文件。$/);
 

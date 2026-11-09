@@ -104,8 +104,8 @@ for (const key of keys) assert.ok(registered[0][1].zh[key].length > 0 && registe
 // uses it, so a renamed key cannot silently ship a literal "{selector}".
 const zhDict = registered[0][1].zh;
 const needed = ["prompt.headerSingle", "prompt.headerMany", "prompt.page", "prompt.selector", "prompt.element",
-  "prompt.geometry", "prompt.styles", "prompt.html", "prompt.target", "prompt.designSingle", "prompt.designMany",
-  "prompt.comment", "prompt.footerSingle", "prompt.footerMany", "prompt.emptyText"];
+  "prompt.geometry", "prompt.styles", "prompt.html", "prompt.target", "prompt.designHeader", "prompt.designHeaderMany",
+  "prompt.designChange", "prompt.comment", "prompt.footerSingle", "prompt.footerMany", "prompt.emptyText"];
 for (const key of needed) assert.ok(typeof zhDict[key] === "string" && zhDict[key].length > 0, `prompt key ${key}`);
 const singleParams = new Set();
 for (const match of zhDict["prompt.selector"].matchAll(/\{(\w+)\}/g)) singleParams.add(match[1]);
@@ -116,6 +116,12 @@ assert.deepEqual([...geometryParams].sort(), ["height", "sx", "sy", "vh", "vw", 
 const targetParams = new Set();
 for (const match of zhDict["prompt.target"].matchAll(/\{(\w+)\}/g)) targetParams.add(match[1]);
 assert.deepEqual([...targetParams].sort(), ["index", "selector", "tag", "text"]);
+const designHeaderParams = new Set();
+for (const match of zhDict["prompt.designHeaderMany"].matchAll(/\{(\w+)\}/g)) designHeaderParams.add(match[1]);
+assert.deepEqual([...designHeaderParams].sort(), ["index"]);
+const designChangeParams = new Set();
+for (const match of zhDict["prompt.designChange"].matchAll(/\{(\w+)\}/g)) designChangeParams.add(match[1]);
+assert.deepEqual([...designChangeParams].sort(), ["from", "property", "to"]);
 
 // Dispose everything; no throw.
 for (const dispose of effects) if (typeof dispose === "function") dispose();

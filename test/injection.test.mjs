@@ -168,13 +168,17 @@ assert.equal(prompt.includes("设计调整"), false, "no design line without des
 // --- design delta on a single target -------------------------------------------------
 guestResult = {
   ...guestResult,
-  design: [{ index: 0, selector: "ignored", changes: ["width: 466px", "border-radius: 12px"] }],
+  design: [{ index: 0, selector: "ignored", changes: [
+    { property: "width", from: "120px", to: "466px" },
+    { property: "border-radius", from: "8px", to: "12px" },
+  ] }],
   submit: true,
 };
 root.children[1].listeners.get("click")[0]({ preventDefault() {}, stopPropagation() {} });
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert.equal(quotes.length, 2);
-assert.match(quotes[1], /- 设计调整：width: 466px; border-radius: 12px/, "single-target design line");
+assert.match(quotes[1], /- 设计调整：\n {2}- width: 120px → 466px\n {2}- border-radius: 8px → 12px/, "single-target design lines");
+assert.equal(quotes[1].includes("[object Object]"), false, "design deltas are formatted, not stringified");
 
 // --- cancellation writes nothing ------------------------------------------------------
 guestResult = { ok: false, reason: "cancel" };

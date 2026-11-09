@@ -140,7 +140,7 @@ export const GUEST_TEXTS = {
   cardHint: "Shift 多选 · Enter 填入 · ⌘Enter 发送",
   placeholder: "添加评论…",
   design: "设计模式",
-  designHint: "只改行内样式，取消即还原",
+  designHint: "调整会写入提示词，不改页面",
   cancel: "取消",
   apply: "应用",
   fill: "填入输入框",

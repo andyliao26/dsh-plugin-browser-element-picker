@@ -199,7 +199,10 @@ guestResult = {
     { ...guestResult.targets[0], selector: "#login" },
     { ...guestResult.targets[0], tag: "span", selector: ".hint", text: "忘记密码", matches: 1 },
   ],
-  design: [{ index: 1, selector: ".hint", changes: ["color: #112233", "font-size: 12px"] }],
+  design: [{ index: 1, selector: ".hint", changes: [
+    { property: "color", from: "#101828", to: "#112233" },
+    { property: "font-size", from: "14px", to: "12px" },
+  ] }],
 };
 button.listeners.get("click")[0]({ preventDefault() {}, stopPropagation() {} });
 await new Promise((resolve) => setTimeout(resolve, 0));
@@ -209,7 +212,7 @@ assert.equal(submissions[0], "queue", "the default delivery mode");
 assert.match(quotes[1], /^【页面标注】共 2 个元素/, "multi-target header");
 assert.match(quotes[1], /1\. <button> 登录 — #login/, "first target line");
 assert.match(quotes[1], /2\. <span> 忘记密码 — \.hint/, "second target line");
-assert.match(quotes[1], /- 设计调整（第 2 个元素）：color: #112233; font-size: 12px/, "design deltas");
+assert.match(quotes[1], /- 设计调整（第 2 个元素）：\n {2}- color: #101828 → #112233\n {2}- font-size: 14px → 12px/, "design deltas");
 
 // --- fallback: a composer that refuses the quote node gets plain text ----------------
 quoteAccepted = false;

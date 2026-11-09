@@ -47,10 +47,10 @@
 
   <rect x="514" y="70" width="172" height="112" rx="12" class="step"/>
   <text x="532" y="98" class="title">设计模式</text>
-  <text x="532" y="120" class="body">行内样式实时生效</text>
+  <text x="532" y="120" class="body">回显当前样式，不改页面</text>
   <text x="532" y="138" class="body">颜色 · 字号 · 圆角</text>
   <text x="532" y="156" class="body">宽高 · 内外边距 · 布局</text>
-  <text x="532" y="174" class="key">取消还原 · 应用记 delta</text>
+  <text x="532" y="174" class="key">取消丢草稿 · 应用记 from→to</text>
 
   <line x1="686" y1="126" x2="724" y2="126" class="arrow" marker-end="url(#a)"/>
 

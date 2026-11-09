@@ -190,7 +190,7 @@ assert.equal(multi.targets.length, 2);
 assert.deepEqual(multi.targets.map((target) => target.tag), ["button", "span"]);
 assert.equal(multi.comment, "这两个一起改");
 
-// ---------------------------------------------------------------- 3. design mode
+// ---------------------------------------------------------------- 3. design mode records intent
 assert.equal(await evaluate(client, START), "started");
 await clickPage("#target");
 await role("design", "click");
@@ -198,35 +198,200 @@ assert.equal(await role("design-panel"), "flex", "design panel opens");
 assert.equal(await role("card"), "none", "the comment card yields to the panel");
 assert.equal(await evaluate(client, `${SR}.querySelectorAll('[data-field]').length`), 16, "every design field renders");
 
+const echoed = await evaluate(client, `(() => {
+  const field = (name, selector = "input") => ${SR}.querySelector('[data-field="' + name + '"] ' + selector);
+  return {
+    width: field("width").value,
+    color: field("color").value,
+    justify: field("justify", "select").value,
+    justifyOptions: Array.from(field("justify", "select").options).map((option) => option.value),
+    gapPlaceholder: field("gap").placeholder,
+    padding: Array.from(${SR}.querySelectorAll('[data-field="padding"] input')).map((input) => input.value),
+    computedWidth: getComputedStyle(document.querySelector("#target")).width
+  };
+})()`);
+assert.equal(echoed.width, "91.3", "width echoes the rendered value with one decimal");
+assert.equal(echoed.color, "#ffffff", "color echoes the computed color");
+assert.equal(echoed.justify, "normal", "a value missing from the option list is preserved");
+assert.ok(echoed.justifyOptions.includes("normal"), "the current value is inserted as an option");
+assert.equal(echoed.gapPlaceholder, "normal", "a non-numeric value stays visible as a placeholder");
+assert.deepEqual(echoed.padding, ["10", "18", "10", "18"], "all four computed padding sides are echoed");
+assert.equal(echoed.computedWidth, "91.3281px", "the panel baseline is the page's rendered width");
+assert.equal(await evaluate(client, "document.querySelector('#target').getAttribute('style')"), null, "opening the panel writes no inline style");
+
 await evaluate(client, `(() => {
-  const width = ${SR}.querySelector('[data-field="width"] input');
-  width.value = "500";
-  width.dispatchEvent(new Event("input", { bubbles: true }));
-  const color = ${SR}.querySelector('[data-field="color"] input');
-  color.value = "#112233";
-  color.dispatchEvent(new Event("input", { bubbles: true }));
+  const set = (name, value) => {
+    const input = ${SR}.querySelector('[data-field="' + name + '"] input');
+    input.value = value;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  };
+  set("width", "500");
+  set("color", "#112233");
+  const padding = ${SR}.querySelectorAll('[data-field="padding"] input');
+  padding[0].value = "20";
+  padding[0].dispatchEvent(new Event("input", { bubbles: true }));
+  const justify = ${SR}.querySelector('[data-field="justify"] select');
+  justify.value = "flex-end";
+  justify.dispatchEvent(new Event("change", { bubbles: true }));
   return true;
 })();`);
 
-const applied = await evaluate(client, `({
-  width: document.querySelector('#target').style.width,
-  color: document.querySelector('#target').style.color
-})`);
-assert.equal(applied.width, "500px", "design edits apply live to the page");
-assert.equal(applied.color, "rgb(17, 34, 51)", "color edits apply live to the page");
+const untouched = await evaluate(client, `(() => {
+  const element = document.querySelector("#target");
+  return {
+    inline: element.getAttribute("style") || "",
+    width: getComputedStyle(element).width,
+    color: getComputedStyle(element).color,
+    box: element.getBoundingClientRect().width
+  };
+})()`);
+assert.equal(untouched.inline, "", "editing writes no inline style");
+assert.equal(untouched.width, "91.3281px", "the rendered width is untouched");
+assert.equal(untouched.color, "rgb(255, 255, 255)", "the rendered color is untouched");
+assert.equal(untouched.box, 91.328125, "the geometry is untouched");
 
 await role("design-apply", "click");
 assert.equal(await role("design-panel"), "none", "apply closes the panel");
 assert.equal(await role("card"), "block", "the comment card returns");
+const deltaText = await evaluate(client, `${SR}.querySelector('[data-role="deltas"]').textContent`);
+assert.match(deltaText, /width: 91\.3px → 500px/);
+assert.match(deltaText, /color: #ffffff → #112233/);
+assert.match(deltaText, /padding-top: 10px → 20px/);
+assert.match(deltaText, /justify-content: normal → flex-end/);
+assert.equal(await evaluate(client, "document.querySelector('#target').getAttribute('style')"), null, "apply still writes no inline style");
+assert.equal(await evaluate(client, "getComputedStyle(document.querySelector('#target')).width"), "91.3281px", "apply leaves computed styles untouched");
+assert.equal(await evaluate(client, "document.querySelector('#target').getBoundingClientRect().width"), 91.328125, "apply leaves geometry untouched");
+
+// Reopening keeps the committed target values and the original baseline.
+await role("design", "click");
+assert.equal(await evaluate(client, `${SR}.querySelector('[data-field="width"] input').value`), "500", "reopen seeds the committed value");
+await evaluate(client, `(() => {
+  const input = ${SR}.querySelector('[data-field="width"] input');
+  input.value = "460";
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  return true;
+})();`);
+await role("design-cancel", "click");
+assert.match(await evaluate(client, `${SR}.querySelector('[data-role="deltas"]').textContent`), /width: 91\.3px → 500px/, "cancelling a later draft keeps the committed delta");
+
+// Applying a later draft still reports the page baseline as `from`.
+await role("design", "click");
+await evaluate(client, `(() => {
+  const input = ${SR}.querySelector('[data-field="width"] input');
+  input.value = "460";
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  return true;
+})();`);
+await role("design-apply", "click");
+assert.match(await evaluate(client, `${SR}.querySelector('[data-role="deltas"]').textContent`), /width: 91\.3px → 460px/, "a new draft is measured against the baseline, not the last commit");
+
 await keyInCard("Enter");
 await sleep(80);
 const designed = await evaluate(client, "window.__r");
 assert.equal(designed.ok, true);
-assert.equal(designed.design.length, 1);
-assert.equal(designed.design[0].index, 0);
-assert.ok(designed.design[0].changes.some((entry) => entry === "width: 500px"), `width delta recorded: ${designed.design[0].changes}`);
+assert.deepEqual(designed.design[0].changes, [
+  { property: "width", from: "91.3px", to: "460px" },
+  { property: "color", from: "#ffffff", to: "#112233" },
+  { property: "padding-top", from: "10px", to: "20px" },
+  { property: "justify-content", from: "normal", to: "flex-end" }
+]);
 
-// ---------------------------------------------------------------- 4. design cancel reverts
+// ---------------------------------------------------------------- 3b. the first baseline sticks
+assert.equal(await evaluate(client, START), "started");
+await clickPage("#target");
+await role("design", "click");
+await evaluate(client, `(() => {
+  const input = ${SR}.querySelector('[data-field="width"] input');
+  input.value = "480";
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  return true;
+})();`);
+await role("design-apply", "click");
+await evaluate(client, 'document.querySelector("#target").style.width = "200px"; true');
+await role("design", "click");
+assert.equal(await evaluate(client, `${SR}.querySelector('[data-field="width"] input').value`), "480", "reopen seeds the committed value");
+await evaluate(client, `(() => {
+  const input = ${SR}.querySelector('[data-field="width"] input');
+  input.value = "";
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  input.dispatchEvent(new Event("blur"));
+  return input.value;
+})();`);
+assert.equal(await evaluate(client, `${SR}.querySelector('[data-field="width"] input').value`), "91.3", "clearing and blurring restores the baseline, not the committed value");
+
+// A rejected negative value must not leave a hidden committed delta behind.
+await role("design-cancel", "click");
+await role("design", "click");
+await evaluate(client, `(() => {
+  const input = ${SR}.querySelector('[data-field="width"] input');
+  input.value = "-5";
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  input.dispatchEvent(new Event("blur"));
+  return input.value;
+})();`);
+assert.equal(await evaluate(client, `${SR}.querySelector('[data-field="width"] input').value`), "91.3", "a rejected negative falls back to the baseline");
+await role("design-apply", "click");
+assert.equal(await evaluate(client, `${SR}.querySelector('[data-role="deltas"]').style.display`), "none", "the rejected value clears the committed delta");
+
+await role("design", "click");
+await evaluate(client, `(() => {
+  const input = ${SR}.querySelector('[data-field="width"] input');
+  input.value = "400";
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  return true;
+})();`);
+await role("design-apply", "click");
+assert.match(await evaluate(client, `${SR}.querySelector('[data-role="deltas"]').textContent`), /width: 91\.3px → 400px/, "the from value is the first baseline even after the page changed");
+await keyInCard("Enter");
+await sleep(80);
+const rebased = await evaluate(client, "window.__r");
+assert.deepEqual(rebased.design[0].changes, [{ property: "width", from: "91.3px", to: "400px" }]);
+await evaluate(client, 'document.querySelector("#target").style.removeProperty("width"); true');
+
+// ---------------------------------------------------------------- 4. cancel and invalid input leave no delta
+assert.equal(await evaluate(client, START), "started");
+await clickPage(".tags span.hot");
+await role("design", "click");
+assert.equal(await evaluate(client, `${SR}.querySelector('[data-field="background"] [data-role="color-value"]').textContent`), "transparent", "a transparent background is echoed as transparent");
+assert.match(await evaluate(client, `${SR}.querySelector('[data-field="background"] [data-role="swatch"]').style.backgroundImage`), /repeating-conic-gradient/, "a transparent swatch is not painted black");
+await evaluate(client, `(() => {
+  const input = ${SR}.querySelector('[data-field="width"] input');
+  input.value = "420";
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  return true;
+})();`);
+assert.equal(await evaluate(client, `${SR}.querySelector('[data-role="deltas"]').style.display`), "none", "no delta is shown before apply");
+await role("design-cancel", "click");
+assert.equal(await evaluate(client, "document.querySelector('.tags span.hot').getAttribute('style')"), null, "cancel leaves the page untouched");
+assert.equal(await evaluate(client, `${SR}.querySelector('[data-role="deltas"]').style.display`), "none", "cancel shows no delta on the card");
+
+// Clearing and out-of-range input must not manufacture deltas.
+await role("design", "click");
+await evaluate(client, `(() => {
+  const width = ${SR}.querySelector('[data-field="width"] input');
+  width.value = "420";
+  width.dispatchEvent(new Event("input", { bubbles: true }));
+  width.value = "";
+  width.dispatchEvent(new Event("input", { bubbles: true }));
+  width.value = "-5";
+  width.dispatchEvent(new Event("input", { bubbles: true }));
+  const opacity = ${SR}.querySelector('[data-field="opacity"] input');
+  opacity.value = "2";
+  opacity.dispatchEvent(new Event("input", { bubbles: true }));
+  const color = ${SR}.querySelector('[data-field="color"] input');
+  color.value = "#000000";
+  color.dispatchEvent(new Event("input", { bubbles: true }));
+  return true;
+})();`);
+await role("design-apply", "click");
+assert.equal(await evaluate(client, `${SR}.querySelector('[data-role="deltas"]').style.display`), "none", "invalid input produces no delta");
+await keyInCard("Enter");
+await sleep(80);
+const cancelled = await evaluate(client, "window.__r");
+assert.equal(cancelled.ok, true);
+assert.equal(cancelled.design.length, 0, "a discarded or invalid draft never reaches the payload");
+
+// ---------------------------------------------------------------- 4b. design Esc discards the draft
 assert.equal(await evaluate(client, START), "started");
 await clickPage(".tags span.hot");
 await role("design", "click");
@@ -234,16 +399,54 @@ await evaluate(client, `(() => {
   const input = ${SR}.querySelector('[data-field="width"] input');
   input.value = "420";
   input.dispatchEvent(new Event("input", { bubbles: true }));
+  document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
   return true;
 })();`);
-assert.equal(await evaluate(client, "document.querySelector('.tags span.hot').style.width"), "420px");
-await role("design-cancel", "click");
-assert.equal(await evaluate(client, "document.querySelector('.tags span.hot').style.width"), "", "cancel restores the inline style");
-await keyInCard("Escape");
-await sleep(60);
-await evaluate(client, `document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })); true;`);
-await sleep(80);
-assert.deepEqual(await evaluate(client, "window.__r"), { ok: false, reason: "cancel" }, "a second Esc ends the session");
+assert.equal(await role("design-panel"), "none", "Esc leaves design mode");
+assert.equal(await role("card"), "block", "Esc returns to the card");
+assert.equal(await evaluate(client, `${SR}.querySelector('[data-role="deltas"]').style.display`), "none", "Esc discards the draft");
+assert.equal(await evaluate(client, "getComputedStyle(document.querySelector('.tags span.hot')).width"), "31.7656px");
+await evaluate(client, "window.__dshAnnotationState.cancel(); true");
+
+// ---------------------------------------------------------------- 4c. many deltas scroll; alpha colors echo faithfully
+assert.equal(await evaluate(client, START), "started");
+await evaluate(client, 'document.querySelector("#target").style.backgroundColor = "rgba(0, 0, 0, 0.5)"; true');
+await clickPage("#target");
+await role("design", "click");
+assert.equal(await evaluate(client, `${SR}.querySelector('[data-field="background"] [data-role="color-value"]').textContent`), "rgba(0, 0, 0, 0.5)", "a translucent background keeps its alpha value");
+await evaluate(client, `(() => {
+  const set = (name, value) => {
+    const input = ${SR}.querySelector('[data-field="' + name + '"] input');
+    input.value = value;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  };
+  set("width", "300");
+  set("height", "50");
+  set("font-size", "16");
+  set("border-radius", "10");
+  set("border-width", "2");
+  set("gap", "8");
+  const padding = ${SR}.querySelectorAll('[data-field="padding"] input');
+  padding[0].value = "12";
+  padding[0].dispatchEvent(new Event("input", { bubbles: true }));
+  const margin = ${SR}.querySelectorAll('[data-field="margin"] input');
+  margin[0].value = "12";
+  margin[0].dispatchEvent(new Event("input", { bubbles: true }));
+  set("opacity", "0.9");
+  return true;
+})();`);
+await role("design-apply", "click");
+const cardScroll = await evaluate(client, `(() => {
+  const area = ${SR}.querySelector('[data-role="deltas"]');
+  area.scrollTop = area.scrollHeight;
+  const apply = ${SR}.querySelector('[data-role="design"]').getBoundingClientRect();
+  return { client: area.clientHeight, total: area.scrollHeight, top: area.scrollTop, visible: apply.top >= 0 && apply.bottom <= innerHeight };
+})()`);
+assert.ok(cardScroll.total > cardScroll.client, "the card's delta area scrolls when there are many deltas");
+assert.ok(cardScroll.top > 0, "the delta area scrolls to the end");
+assert.ok(cardScroll.visible, "the card's edit action stays reachable");
+await evaluate(client, "window.__dshAnnotationState.cancel(); true");
+await evaluate(client, 'document.querySelector("#target").style.removeProperty("background-color"); true');
 
 // ---------------------------------------------------------------- 5. Esc walks back
 assert.equal(await evaluate(client, START), "started");
@@ -254,6 +457,164 @@ assert.equal(await evaluate(client, "window.__r === undefined"), true, "the sess
 await evaluate(client, `document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })); true;`);
 await sleep(80);
 assert.equal((await evaluate(client, "window.__r")).reason, "cancel");
+
+// ---------------------------------------------------------------- 6. deltas stay bound to their element
+assert.equal(await evaluate(client, START), "started");
+await clickPage("#first");
+await clickPage("#target", true);
+await clickPage(".tags span.hot", true);
+assert.match(await evaluate(client, `${SR}.querySelector('[data-role="card"]').textContent`), /已选择 3 项/);
+for (const index of [0, 1, 2]) {
+  await evaluate(client, `${SR}.querySelectorAll('[data-role="chip"]')[${index}].click(); true;`);
+  await role("design", "click");
+  await evaluate(client, `(() => {
+    const input = ${SR}.querySelector('[data-field="width"] input');
+    input.value = "${300 + index * 10}";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    return true;
+  })();`);
+  await role("design-apply", "click");
+}
+await evaluate(client, `${SR}.querySelectorAll('[data-role="chip-remove"]')[0].click(); true;`);
+assert.match(await evaluate(client, `${SR}.querySelector('[data-role="card"]').textContent`), /已选择 2 项/);
+await keyInCard("Enter");
+await sleep(80);
+const bound = await evaluate(client, "window.__r");
+assert.equal(bound.targets.length, 2);
+assert.equal(bound.design.length, 2);
+assert.equal(bound.design[0].index, 0);
+assert.equal(bound.design[0].selector, bound.targets[0].selector);
+assert.equal(bound.design[0].changes[0].to, "310px", "the middle target keeps its own delta");
+assert.equal(bound.design[1].index, 1);
+assert.equal(bound.design[1].selector, bound.targets[1].selector, "the delta follows the element, not the old index");
+assert.equal(bound.design[1].changes[0].to, "320px", "the last target keeps its own delta");
+
+// ---------------------------------------------------------------- 7. short viewport scrolls
+assert.equal(await evaluate(client, START), "started");
+await clickPage("#target");
+await role("design", "click");
+await evaluate(client, "window.resizeTo(1000, 520); true");
+await sleep(120);
+const scroll = await evaluate(client, `(() => {
+  const body = ${SR}.querySelector('[data-role="design-panel"]').children[1];
+  body.scrollTop = body.scrollHeight;
+  const footer = ${SR}.querySelector('[data-role="design-apply"]').getBoundingClientRect();
+  const cancel = ${SR}.querySelector('[data-role="design-cancel"]').getBoundingClientRect();
+  const last = ${SR}.querySelector('[data-field="gap"]').getBoundingClientRect();
+  return {
+    client: body.clientHeight,
+    total: body.scrollHeight,
+    top: body.scrollTop,
+    footerTop: footer.top,
+    footerBottom: footer.bottom,
+    cancelTop: cancel.top,
+    cancelBottom: cancel.bottom,
+    lastTop: last.top,
+    lastBottom: last.bottom,
+    viewport: innerHeight
+  };
+})()`);
+assert.ok(scroll.total > scroll.client, "the panel body is scrollable at a short viewport");
+assert.ok(scroll.top > 0, "the panel body scrolls to the end");
+assert.ok(scroll.footerTop >= 0 && scroll.footerBottom <= scroll.viewport, "apply stays reachable");
+assert.ok(scroll.cancelTop >= 0 && scroll.cancelBottom <= scroll.viewport, "cancel stays reachable");
+assert.ok(scroll.lastTop >= 0 && scroll.lastBottom <= scroll.viewport, "the last field is reachable");
+await evaluate(client, "window.__dshAnnotationState.cancel(); true");
+await evaluate(client, "window.resizeTo(1200, 900); true");
+await sleep(120);
+
+// ---------------------------------------------------------------- 8. keyboard keeps buttons, IME and design mode intact
+assert.equal(await evaluate(client, START), "started");
+await clickPage("#target");
+await evaluate(client, `(() => {
+  ${SR}.querySelector('[data-role="design"]').dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+  return true;
+})();`);
+assert.equal(await evaluate(client, "window.__r === undefined"), true, "a synthetic Enter on a button does not submit the session");
+
+// A real Enter on the focused edit button activates it instead of submitting.
+await evaluate(client, `${SR}.querySelector('[data-role="design"]').focus(); true`);
+const focusInfo = await evaluate(client, `${SR}.activeElement ? ${SR}.activeElement.tagName + ":" + ${SR}.activeElement.getAttribute("data-role") : "none"`);
+const down = await client.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", text: "\r", unmodifiedText: "\r", windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 });
+await client.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 });
+await sleep(80);
+assert.equal(await role("design-panel"), "flex", `Enter on the focused edit button opens the design panel (focus=${focusInfo}, down=${JSON.stringify(down)})`);
+assert.equal(await evaluate(client, "window.__r === undefined"), true, "the session stays open");
+await role("design-cancel", "click");
+
+await evaluate(client, `(() => {
+  const area = ${SR}.querySelector('[data-role="comment"]');
+  const event = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+  Object.defineProperty(event, "isComposing", { value: true });
+  area.dispatchEvent(event);
+  return true;
+})();`);
+assert.equal(await evaluate(client, "window.__r === undefined"), true, "an overlay IME Enter is ignored");
+await evaluate(client, `(() => {
+  const modern = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+  Object.defineProperty(modern, "isComposing", { value: true });
+  document.body.dispatchEvent(modern);
+  const legacy = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+  Object.defineProperty(legacy, "keyCode", { value: 229 });
+  document.body.dispatchEvent(legacy);
+  return true;
+})();`);
+assert.equal(await evaluate(client, "window.__r === undefined"), true, "a page-level IME Enter is ignored");
+await keyInCard("Escape");
+await sleep(60);
+await evaluate(client, `document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })); true;`);
+await sleep(80);
+
+assert.equal(await evaluate(client, START), "started");
+await clickPage("#target");
+await role("design", "click");
+await evaluate(client, `(() => {
+  const input = ${SR}.querySelector('[data-field="width"] input');
+  input.value = "333";
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+  return true;
+})();`);
+assert.equal(await role("design-panel"), "flex", "page-level Enter leaves design mode open");
+assert.equal(await evaluate(client, "window.__r === undefined"), true, "page-level Enter does not finish the session");
+await role("design-apply", "click");
+await keyInCard("Enter");
+await sleep(80);
+const afterEnter = await evaluate(client, "window.__r");
+assert.ok(afterEnter.design[0].changes.some((delta) => delta.to === "333px"), "the draft survived the page-level Enter");
+
+// ---------------------------------------------------------------- 9. the page's cursor is restored
+await evaluate(client, 'document.documentElement.style.cursor = "pointer"; document.documentElement.style.userSelect = "text"; true');
+assert.equal(await evaluate(client, START), "started");
+assert.equal(await evaluate(client, "document.documentElement.style.cursor"), "crosshair", "picking uses the crosshair cursor");
+await clickPage("#target");
+assert.equal(await evaluate(client, "document.documentElement.style.cursor"), "pointer", "the page cursor returns outside picking");
+await keyInCard("Enter");
+await sleep(80);
+assert.equal(await evaluate(client, "document.documentElement.style.cursor"), "pointer", "the session restores the page cursor");
+assert.equal(await evaluate(client, "document.documentElement.style.userSelect"), "text", "the page user-select is restored");
+await evaluate(client, 'document.documentElement.style.removeProperty("cursor"); document.documentElement.style.removeProperty("user-select"); true');
+
+// ---------------------------------------------------------------- 10. detached targets are dropped
+assert.equal(await evaluate(client, START), "started");
+await clickPage("#first");
+await clickPage("#target", true);
+await role("design", "click");
+await evaluate(client, `(() => {
+  const input = ${SR}.querySelector('[data-field="width"] input');
+  input.value = "300";
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  return true;
+})();`);
+await role("design-apply", "click");
+await evaluate(client, 'document.querySelector("#target").remove(); true');
+await keyInCard("Enter");
+await sleep(80);
+const detached = await evaluate(client, "window.__r");
+assert.equal(detached.ok, true);
+assert.equal(detached.targets.length, 1, "the detached target is omitted");
+assert.equal(detached.targets[0].selector, "#first");
+assert.equal(detached.design.length, 0);
 
 client.close();
 chrome.kill("SIGKILL");
