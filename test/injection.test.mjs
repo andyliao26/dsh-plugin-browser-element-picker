@@ -79,11 +79,21 @@ Object.assign(frame, {
   executeJavaScript: async () => guestResult,
 });
 
+const documentListeners = new Map();
 globalThis.document = {
   body,
+  head: new FakeNode("head"),
   documentElement: new FakeNode("html"),
   createElement: (tag) => new FakeNode(tag),
   querySelectorAll: (selector) => (selector === "webview[data-sidebar-browser-frame]" ? [frame] : []),
+  addEventListener: (type, handler) => {
+    if (!documentListeners.has(type)) documentListeners.set(type, []);
+    documentListeners.get(type).push(handler);
+  },
+  removeEventListener: (type, handler) => {
+    const list = documentListeners.get(type) ?? [];
+    documentListeners.set(type, list.filter((entry) => entry !== handler));
+  },
 };
 
 const windowMock = {
@@ -102,7 +112,10 @@ globalThis.MutationObserver = class { observe() {} disconnect() {} };
 
 const drafts = [];
 const quotes = [];
+const references = [];
+const sources = [];
 let quoteAccepted = true;
+let referenceAccepted = false;
 const disposers = [];
 const binding = { sessionId: "sess-1" };
 const dictionaries = [];
@@ -121,11 +134,26 @@ const ctx = {
   },
   get: (name) => {
     if (name === "sessions") return { binding: (id) => (id === "sess-1" ? binding : undefined) };
+    if (name === "inputTriggers") {
+      return {
+        registerSource: (source) => {
+          sources.push(source);
+          return () => sources.splice(sources.indexOf(source), 1);
+        },
+      };
+    }
     if (name === "conversation") {
       return {
         input: {
           requestDraftInitialization: (target, options) => { drafts.push(options); return "applied"; },
           shellFor: () => ({
+            rev: 3,
+            caretSpan: () => ({ start: 7, end: 7 }),
+            insertReference: (reference, span) => {
+              if (!referenceAccepted) return false;
+              references.push({ ref: reference, span });
+              return true;
+            },
             insertQuote: (text) => { if (!quoteAccepted) return false; quotes.push(text); return true; },
             submit: () => {},
           }),
@@ -263,10 +291,46 @@ assert.equal(drafts.length, 1, "plain draft fallback");
 assert.equal(drafts[0].prompt, single, "plain-text fallback matches the quote block");
 assert.equal(drafts[0].prompt.includes("修改要求"), false, "no empty request suffix");
 
+// --- reference chip: short label, full block in the codec -----------------------------
+assert.equal(sources.length, 1, "the annotation reference source registers once");
+assert.equal(sources[0].name, "browser-element-picker");
+assert.equal(sources[0].trigger, "\u0001", "the trigger is not typeable");
+assert.equal(await sources[0].codec.serialize(single), single, "the codec expands the stored block as-is");
+
+referenceAccepted = true;
+quoteAccepted = true;
+guestResult = { ...BASE, submit: false, design: [], comment: "背景换成品牌绿" };
+await click();
+assert.equal(references.length, 1, "the chip path wins over the quote node");
+assert.equal(quotes.length, 6, "no quote block was appended for the chip path");
+const chip = references[0].ref;
+assert.equal(chip.source, "browser-element-picker");
+assert.equal(chip.label, "<button> 背景换成品牌绿", "the chip shows the user's own text");
+assert.equal(chip.clipboardText, chip.label, "the draft text is the short label");
+assert.equal(chip.ref, single, "the full block rides in the reference");
+assert.deepEqual(references[0].span, { start: 7, end: 7, draftRev: 3 }, "the caret span and revision guard the insert");
+
+guestResult = {
+  ...BASE,
+  targets: [BASE.targets[0], { ...BASE.targets[0], selector: "#cancel", text: "取消" }],
+  design: [],
+  comment: "两个按钮的高度统一为40px。",
+};
+await click();
+assert.equal(references.length, 2);
+assert.equal(references[1].ref.label, "<button> 等 2 项 · 两个按钮的高度统一为40px。", "multi-target chip carries the count and the comment");
+assert.match(references[1].ref.ref, /^【页面标注】2 个元素\n/);
+
+referenceAccepted = false;
+guestResult = { ...BASE, submit: false, design: [], comment: "背景换成品牌绿" };
+await click();
+assert.equal(references.length, 2, "a refused chip inserts nothing");
+assert.equal(quotes.length, 7, "a refused chip falls back to the quote node");
+
 // --- cancellation writes nothing ------------------------------------------------------
 guestResult = { ok: false, reason: "cancel" };
 await click();
-assert.equal(quotes.length, 6, "a cancelled session leaves the composer alone");
+assert.equal(quotes.length, 7, "a cancelled session leaves the composer alone");
 assert.equal(drafts.length, 1);
 
 // --- teardown -------------------------------------------------------------------------

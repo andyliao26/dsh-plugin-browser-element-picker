@@ -26,7 +26,7 @@ assert.equal(typeof captured.factory, "function", "factory is a function");
 
 const exportsObject = captured.factory(() => { throw new Error("this bundle requests no shared modules"); });
 assert.equal(typeof exportsObject.apply, "function", "apply is exported");
-assert.deepEqual(exportsObject.inject, ["locale"], "only the locale service gates mounting");
+assert.deepEqual(exportsObject.inject, ["locale", "inputTriggers"], "locale and the reference roster gate mounting");
 
 // Mount against a mocked context + DOM, then assert the button behaviour.
 const registered = [];

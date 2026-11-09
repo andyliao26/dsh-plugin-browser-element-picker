@@ -3,7 +3,8 @@
 Guidance for agents working on `dsh-plugin-browser-element-picker` — a single DSH
 bundle that adds Codex-style page annotation to the Desktop sidebar browser:
 pick elements → comment (optionally record design adjustments) → Enter fills the
-prompt as a quote block, ⌘/Ctrl+Enter fills and sends.
+prompt as a short reference chip that expands to the full annotation on send,
+⌘/Ctrl+Enter fills and sends.
 
 ## Project context
 
@@ -94,7 +95,7 @@ matching balanced braces from the literal text `function guestAnnotate(`.
 ### 2. Loader / bundle contract
 
 - Module id equals the package name; `factory(require)` must not require shared
-  modules; exports are `apply` and `inject = ["locale"]`.
+  modules; exports are `apply` and `inject = ["locale", "inputTriggers"]`.
 - The Host half stays empty. Do not register tools, services, or commands here.
 - `package.json` `files` and `exports` list every shipped runtime file. Anything
   added at runtime must be added there or installed copies break.
@@ -143,16 +144,27 @@ has no quote flag; the quote-node path and the plain-text fallback share it.
 
 Host-side precedence in `inject()`, in order:
 
-1. `conversation.input.shellFor(binding).insertQuote(block)` → one removable quote
-   node, caret after it.
-2. Fallback `conversation.input.requestDraftInitialization(binding, { prompt,
+1. `shell.insertReference(insert, span)` → one short reference chip. `apply()`
+   registers the owning source (`browser-element-picker`) with `inputTriggers`
+   before the button mounts: the chip shows `annotationChipLabel()` (e.g.
+   `<button> 背景换成品牌绿`, i.e. the tag plus the user's comment) while
+   `codec.serialize(ref)` returns the full block, so display and model text stay
+   separate. Never insert a chip unless the source
+   registered — an unowned source blocks the send. `span` is
+   `{ ...shell.caretSpan(), draftRev: shell.rev }`. Clicking the chip opens the
+   plugin's own full-block preview (`openReference`); a small injected style
+   hides the native reference marker.
+2. Fallback `shell.insertQuote(block)` → one removable quote node when the
+   chip path is unavailable.
+3. Fallback `conversation.input.requestDraftInitialization(binding, { prompt,
    whenDraftExists: "append" })` → plain text; `"blocked"` means the composer is
    busy, so toast and stop.
-3. Only when `result.submit === true`, `shell.submit("queue")` — the same
+4. Only when `result.submit === true`, `shell.submit("queue")` — the same
    transaction as the composer's own Enter.
 
-Never synthesize keystrokes or write into the composer DOM; go through these
-services. A cancelled session must write nothing.
+All three insertion paths deliver the same block text. Never synthesize
+keystrokes or write into the composer DOM; go through these services. A
+cancelled session must write nothing.
 
 ### 5. DOM integration is heuristic and must self-heal
 

@@ -137,16 +137,14 @@ export async function launchPage(htmlPath) {
 /** Localized guest copy used by the tests. */
 export const GUEST_TEXTS = {
   hint: "点击选择元素 · Shift 点击可多选 · Enter 填入 · ⌘Enter 直接发送 · Esc 退出",
-  cardHint: "Shift 多选 · Enter 填入 · ⌘Enter 发送",
   placeholder: "添加评论…",
   design: "设计模式",
-  designHint: "调整会写入提示词，不改页面",
+  designPlaceholder: "描述这些更改…",
   cancel: "取消",
   apply: "应用",
   fill: "填入输入框",
-  send: "直接发送",
+  fillHint: "填入输入框 · ⌘/Ctrl+Enter 直接发送",
   close: "关闭",
-  selected: "已选择 {count} 项",
   remove: "移除",
   empty: "（无可见文本）",
   labels: {

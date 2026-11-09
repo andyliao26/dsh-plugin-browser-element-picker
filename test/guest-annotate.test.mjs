@@ -149,7 +149,10 @@ const role = (name, method = "") => evaluate(client, `(() => {
 assert.equal(await evaluate(client, START), "started");
 await clickPage("#target");
 assert.equal(await role("card"), "block", "the comment card opens on the first pick");
-assert.match(await evaluate(client, `${SR}.querySelector('[data-role="card"]').textContent`), /已选择 1 项/);
+assert.equal(await evaluate(client, `${SR}.querySelectorAll('[data-role="chip"]').length`), 1, "one chip for one target");
+assert.equal(await evaluate(client, `${SR}.querySelector('[data-role="send"]') === null`), true, "a single submit button, no separate send button");
+assert.equal(await evaluate(client, `(${SR}.querySelector('[data-role="card"]').textContent || "").includes("已选择")`), false, "no selected-count line");
+assert.match(await evaluate(client, `${SR}.querySelector('[data-role="fill"]').title`), /⌘\/Ctrl\+Enter/, "hover title carries the send shortcut");
 assert.equal(await evaluate(client, `${SR}.querySelectorAll('[data-mark="badge"]').length`), 1, "one mark for one target");
 assert.equal(await evaluate(client, `${SR}.querySelectorAll('[data-mark="box"]').length`), 1);
 
@@ -157,7 +160,7 @@ assert.equal(await evaluate(client, `${SR}.querySelectorAll('[data-mark="box"]')
 await clickPage(".tags span.hot");
 assert.equal(await evaluate(client, `${SR}.querySelectorAll('[data-mark="badge"]').length`), 1, "replacing the target clears the old mark");
 assert.equal(await evaluate(client, `${SR}.querySelectorAll('[data-mark="box"]').length`), 1);
-assert.match(await evaluate(client, `${SR}.querySelector('[data-role="card"]').textContent`), /已选择 1 项/);
+assert.equal(await evaluate(client, `${SR}.querySelectorAll('[data-role="chip"]').length`), 1, "replacing the target keeps one chip");
 await clickPage("#target");
 assert.equal(await evaluate(client, `document.querySelector('#target').getBoundingClientRect().width > 0`), true);
 
@@ -180,7 +183,7 @@ assert.equal(await evaluate(client, "window.__pageClicks"), 0, "page clicks stay
 assert.equal(await evaluate(client, START), "started");
 await clickPage("#target");
 await clickPage(".tags span.hot", true);
-assert.match(await evaluate(client, `${SR}.querySelector('[data-role="card"]').textContent`), /已选择 2 项/);
+assert.equal(await evaluate(client, `${SR}.querySelectorAll('[data-role="chip"]').length`), 2, "two chips for two targets");
 await typeComment("这两个一起改");
 await keyInCard("Enter", '{ metaKey: true }');
 await sleep(80);
@@ -197,6 +200,22 @@ await role("design", "click");
 assert.equal(await role("design-panel"), "flex", "design panel opens");
 assert.equal(await role("card"), "none", "the comment card yields to the panel");
 assert.equal(await evaluate(client, `${SR}.querySelectorAll('[data-field]').length`), 16, "every design field renders");
+
+assert.equal(await evaluate(client, `${SR}.querySelector('[data-role="design-comment"]').placeholder`), GUEST_TEXTS.designPlaceholder, "the panel carries a description field");
+
+const dragged = await evaluate(client, `(() => {
+  const panel = ${SR}.querySelector('[data-role="design-panel"]');
+  const handle = ${SR}.querySelector('[data-role="design-drag"]');
+  const frame = handle.getBoundingClientRect();
+  const before = panel.getBoundingClientRect();
+  const point = (type, x, y) => handle.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 7, button: 0, clientX: x, clientY: y }));
+  point("pointerdown", frame.left + 12, frame.top + 8);
+  point("pointermove", frame.left + 52, frame.top + 48);
+  point("pointerup", frame.left + 52, frame.top + 48);
+  const after = panel.getBoundingClientRect();
+  return { dx: Math.round(after.left - before.left), dy: Math.round(after.top - before.top) };
+})();`);
+assert.deepEqual(dragged, { dx: 40, dy: 40 }, "dragging the header moves the panel");
 
 const echoed = await evaluate(client, `(() => {
   const field = (name, selector = "input") => ${SR}.querySelector('[data-field="' + name + '"] ' + selector);
@@ -236,6 +255,24 @@ await evaluate(client, `(() => {
   return true;
 })();`);
 
+const rows = await evaluate(client, `(() => {
+  const width = ${SR}.querySelector('[data-field="width"]');
+  const height = ${SR}.querySelector('[data-field="height"]');
+  const strip = ${SR}.querySelector('[data-role="design-drag"]');
+  const stripStyle = getComputedStyle(strip);
+  return {
+    changed: width.style.background,
+    untouched: height.style.background,
+    rowMargin: getComputedStyle(width).marginTop,
+    stripLeft: stripStyle.marginLeft,
+    stripRight: stripStyle.marginRight
+  };
+})()`);
+assert.notEqual(rows.changed, rows.untouched, "changed rows are tinted apart from untouched rows");
+assert.equal(rows.untouched, "transparent", "untouched rows keep the plain background");
+assert.equal(rows.rowMargin, "2px", "rows keep vertical breathing room");
+assert.deepEqual([rows.stripLeft, rows.stripRight], ["0px", "0px"], "the drag strip spans the full panel width");
+
 const untouched = await evaluate(client, `(() => {
   const element = document.querySelector("#target");
   return {
@@ -250,9 +287,17 @@ assert.equal(untouched.width, "91.3281px", "the rendered width is untouched");
 assert.equal(untouched.color, "rgb(255, 255, 255)", "the rendered color is untouched");
 assert.equal(untouched.box, 91.328125, "the geometry is untouched");
 
+await evaluate(client, `(() => {
+  const note = ${SR}.querySelector('[data-role="design-comment"]');
+  note.value = "宽度和颜色一起调";
+  note.dispatchEvent(new Event("input", { bubbles: true }));
+  return true;
+})();`);
+
 await role("design-apply", "click");
 assert.equal(await role("design-panel"), "none", "apply closes the panel");
 assert.equal(await role("card"), "block", "the comment card returns");
+assert.equal(await evaluate(client, `${SR}.querySelector('[data-role="comment"]').value`), "宽度和颜色一起调", "the panel description carries back to the card comment");
 const deltaText = await evaluate(client, `${SR}.querySelector('[data-role="deltas"]').textContent`);
 assert.match(deltaText, /width: 91\.3px → 500px/);
 assert.match(deltaText, /color: #ffffff → #112233/);
@@ -289,6 +334,7 @@ await keyInCard("Enter");
 await sleep(80);
 const designed = await evaluate(client, "window.__r");
 assert.equal(designed.ok, true);
+assert.equal(designed.comment, "宽度和颜色一起调", "the panel description reaches the host payload");
 assert.deepEqual(designed.design[0].changes, [
   { property: "width", from: "91.3px", to: "460px" },
   { property: "color", from: "#ffffff", to: "#112233" },
@@ -463,7 +509,7 @@ assert.equal(await evaluate(client, START), "started");
 await clickPage("#first");
 await clickPage("#target", true);
 await clickPage(".tags span.hot", true);
-assert.match(await evaluate(client, `${SR}.querySelector('[data-role="card"]').textContent`), /已选择 3 项/);
+assert.equal(await evaluate(client, `${SR}.querySelectorAll('[data-role="chip"]').length`), 3, "three chips for three targets");
 for (const index of [0, 1, 2]) {
   await evaluate(client, `${SR}.querySelectorAll('[data-role="chip"]')[${index}].click(); true;`);
   await role("design", "click");
@@ -476,7 +522,7 @@ for (const index of [0, 1, 2]) {
   await role("design-apply", "click");
 }
 await evaluate(client, `${SR}.querySelectorAll('[data-role="chip-remove"]')[0].click(); true;`);
-assert.match(await evaluate(client, `${SR}.querySelector('[data-role="card"]').textContent`), /已选择 2 项/);
+assert.equal(await evaluate(client, `${SR}.querySelectorAll('[data-role="chip"]').length`), 2, "removing one chip leaves two");
 await keyInCard("Enter");
 await sleep(80);
 const bound = await evaluate(client, "window.__r");
@@ -496,7 +542,7 @@ await role("design", "click");
 await evaluate(client, "window.resizeTo(1000, 520); true");
 await sleep(120);
 const scroll = await evaluate(client, `(() => {
-  const body = ${SR}.querySelector('[data-role="design-panel"]').children[1];
+  const body = ${SR}.querySelector('[data-role="design-body"]');
   body.scrollTop = body.scrollHeight;
   const footer = ${SR}.querySelector('[data-role="design-apply"]').getBoundingClientRect();
   const cancel = ${SR}.querySelector('[data-role="design-cancel"]').getBoundingClientRect();
