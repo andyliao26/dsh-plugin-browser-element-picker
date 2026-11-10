@@ -120,6 +120,7 @@ let quoteAccepted = true;
 let referenceAccepted = false;
 const disposers = [];
 const binding = { sessionId: "sess-1" };
+const shellCaret = { start: 0 };
 const dictionaries = [];
 const ctx = {
   locale: {
@@ -150,7 +151,7 @@ const ctx = {
           requestDraftInitialization: (target, options) => { drafts.push(options); return "applied"; },
           shellFor: () => ({
             rev: 3,
-            caretSpan: () => ({ start: 7, end: 7 }),
+            caretSpan: () => ({ start: shellCaret.start, end: shellCaret.start }),
             insertReference: (reference, span) => {
               if (!referenceAccepted) return false;
               references.push({ ref: reference, span });
@@ -310,7 +311,7 @@ assert.equal(chip.source, "browser-element-picker");
 assert.equal(chip.label, "<button> 背景换成品牌绿", "the chip shows the user's own text");
 assert.equal(chip.clipboardText, chip.label, "the draft text is the short label");
 assert.equal(chip.ref, single, "the full block rides in the reference");
-assert.deepEqual(references[0].span, { start: 7, end: 7, draftRev: 3 }, "the caret span and revision guard the insert");
+assert.deepEqual(references[0].span, { start: 0, end: 0, draftRev: 3 }, "the caret span and revision guard the insert");
 
 guestResult = {
   ...BASE,
@@ -334,6 +335,22 @@ guestResult = { ok: false, reason: "cancel" };
 await click();
 assert.equal(quotes.length, 8, "a cancelled session leaves the composer alone");
 assert.equal(drafts.length, 1);
+
+// --- a block that lands after existing content becomes its own section ---------------
+referenceAccepted = true;
+quoteAccepted = true;
+guestResult = { ...BASE, submit: false, design: [], comment: "背景换成品牌绿" };
+shellCaret.start = 42;
+const beforeSection = { references: references.length, quotes: quotes.length, drafts: drafts.length };
+await click();
+assert.equal(references.length, beforeSection.references + 1, "the chip is still inserted");
+const section = references[references.length - 1].ref;
+assert.match(section.ref, /^\n\n---\n\n页面：订单列表 \| http:\/\/localhost:5173\/orders\n/, "a later block starts with a blank line, a rule and a blank line");
+assert.equal(section.label, "<button> 背景换成品牌绿", "the chip keeps its short label");
+assert.equal(section.ref.endsWith("**修改要求:** 背景换成品牌绿"), true, "the block body is unchanged");
+shellCaret.start = 0;
+await click();
+assert.equal(references[references.length - 1].ref.ref.startsWith("页面："), true, "an empty draft still starts with the page line");
 
 // --- an unfinished session writes nothing ---------------------------------------------
 const settled = { references: references.length, quotes: quotes.length, drafts: drafts.length, submits: submits.length };
