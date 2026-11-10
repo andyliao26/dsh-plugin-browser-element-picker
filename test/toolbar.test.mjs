@@ -254,7 +254,7 @@ const command = shortcutCommands[0];
 assert.equal(command.id, "browser-element-picker.annotate");
 assert.deepEqual(command.defaults["desktop:macos"], { code: "KeyC", modifiers: ["primary", "shift"] }, "cmd+shift+c on macos");
 assert.deepEqual(command.defaults["desktop:windows"], { code: "KeyC", modifiers: ["primary", "shift"] }, "ctrl+shift+c on windows");
-assert.equal(command.defaults["web:macos"], undefined, "the web build gets no binding");
+assert.deepEqual(Object.keys(command.defaults).sort(), ["desktop:macos", "desktop:windows"], "desktop mac and windows only; linux reserves ctrl+c and the web build cannot inject");
 assert.equal(command.label(), "标注页面元素", "the cheatsheet shows a localized name");
 assert.deepEqual(command.regions, ["page", "editable"], "page and composer regions only");
 
@@ -283,6 +283,26 @@ frame.box = { top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0 };
 assert.equal(command.resolve({ region: "page", modal: null }).status, "pass", "a hidden page leaves the key to the app");
 frame.box = originalBox;
 assert.equal(command.resolve({ region: "page", modal: null }).status, "handled", "the visible page claims it again");
+
+// --- a rejected registration must not take the button down ----------------------------
+const rejection = {
+  locale: ctx.locale,
+  effect: ctx.effect,
+  get: (name) => (name === "shortcuts"
+    ? {
+        register: () => { throw new Error("Reserved shortcut default: browser-element-picker.annotate"); },
+        catalog: { getSnapshot: () => [], subscribe: () => () => {} },
+      }
+    : ctx.get(name)),
+};
+const warnings = [];
+const nativeWarn = console.warn;
+console.warn = (...args) => { warnings.push(args.map(String).join(" ")); };
+const mountedBefore = toolbar.children.length;
+exportsObject.apply(rejection);
+console.warn = nativeWarn;
+assert.equal(toolbar.children.length, mountedBefore + 1, "the button still mounts when the shortcut is rejected");
+assert.ok(warnings.some((line) => line.includes("shortcut unavailable")), "the rejection is reported, not swallowed");
 
 // --- teardown ------------------------------------------------------------------------
 for (const disposer of disposers) disposer();

@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-browser-element-picker",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "description": "Codex-style page annotation for the Desktop sidebar browser: pick elements, comment, nudge styles, fill or send the prompt",
   "license": "MIT",
   "type": "module",

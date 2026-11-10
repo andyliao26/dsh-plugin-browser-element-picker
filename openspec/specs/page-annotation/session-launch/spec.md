@@ -7,7 +7,7 @@ Defines how a user starts an annotation session from the keyboard, where that sh
 
 ### Requirement: A keyboard shortcut opens and closes a session
 
-The plugin SHALL register one user-remappable command whose default binding is `Cmd+Shift+C` on macOS desktop and `Ctrl+Shift+C` on Windows and Linux desktop. The command SHALL start a session when none is running and SHALL cancel the running one otherwise.
+The plugin SHALL register one user-remappable command whose default binding is `Cmd+Shift+C` on macOS desktop and `Ctrl+Shift+C` on Windows desktop. The command SHALL start a session when none is running and SHALL cancel the running one otherwise.
 
 #### Scenario: Default binding starts a session
 - **WHEN** no session is running, a browser page is on screen, and the user presses the default combination
@@ -20,6 +20,10 @@ The plugin SHALL register one user-remappable command whose default binding is `
 #### Scenario: The web build carries no default
 - **WHEN** the same plugin is mounted in a browser build
 - **THEN** the command is registered without a binding there
+
+#### Scenario: Linux desktop carries no default
+- **WHEN** the plugin is mounted on Linux desktop
+- **THEN** the command is registered without a binding, because the platform reserves the primary-plus-C family
 
 ### Requirement: The shortcut is claimed only while a browser page is open
 
@@ -52,3 +56,17 @@ The command SHALL appear in the application's keyboard settings under a localize
 #### Scenario: An unbound command hides the hint
 - **WHEN** the user clears the binding
 - **THEN** the tooltip falls back to the action label and no shortcut attribute is exposed
+
+### Requirement: A rejected shortcut never disables the button
+
+When the keyboard service refuses the registration — a reserved default, a conflict, or no service at all — the toolbar button and the session itself SHALL keep working, and the refusal SHALL be reported to the console instead of aborting plugin startup.
+
+#### Scenario: A reserved default leaves the button in place
+- **WHEN** the keyboard service throws while registering the command
+- **THEN** the button still mounts on the browser tab
+- **AND** starting a session from it still works
+- **AND** the refusal appears in the console
+
+#### Scenario: No keyboard service at all
+- **WHEN** the plugin is mounted in an environment without the shortcut service
+- **THEN** it starts normally with the button and no shortcut
