@@ -30,6 +30,7 @@ class FakeNode {
   }
   setAttribute(name, value) { this.attributes[name] = String(value); }
   getAttribute(name) { return this.attributes[name] ?? null; }
+  removeAttribute(name) { delete this.attributes[name]; }
   addEventListener(type, handler) {
     if (!this.listeners.has(type)) this.listeners.set(type, []);
     this.listeners.get(type).push(handler);
@@ -79,7 +80,7 @@ tab.querySelectorAll = (selector) => (selector === "input" ? [input] : []);
 
 Object.assign(frame, {
   getURL: () => "http://localhost:5173/login",
-  executeJavaScript: async () => guestResult,
+  executeJavaScript: async () => { executed += 1; return guestResult; },
 });
 
 globalThis.document = {
@@ -110,6 +111,17 @@ globalThis.MutationObserver = class { observe() {} disconnect() {} };
 
 const drafts = [];
 const quotes = [];
+let executed = 0;
+const shortcutCommands = [];
+const catalogListeners = [];
+let shortcutKeys = "";
+const shortcuts = {
+  register: (command) => { shortcutCommands.push(command); return () => {}; },
+  catalog: {
+    getSnapshot: () => (shortcutKeys === "" ? [] : [{ id: "browser-element-picker.annotate", keys: shortcutKeys, aria: "Meta+Shift+C" }]),
+    subscribe: (listener) => { catalogListeners.push(listener); return () => {}; },
+  },
+};
 const submissions = [];
 let quoteAccepted = true;
 const disposers = [];
@@ -148,6 +160,7 @@ const ctx = {
         },
       };
     }
+    if (name === "shortcuts") return shortcuts;
     if (name === "sidebarRight") return { mounted: { getSnapshot: () => "sess-1" } };
     return undefined;
   },
@@ -234,6 +247,42 @@ assert.equal(drafts.length, 1, "the annotation fell back to plain draft text");
 assert.equal(drafts[0].whenDraftExists, "append");
 assert.equal(drafts[0].prompt, quotes[1], "the plain fallback matches the multi-target quote block");
 assert.equal(drafts[0].prompt.split("**修改要求:**").length - 1, 1, "the request section appears exactly once");
+
+// --- keyboard shortcut ---------------------------------------------------------------
+assert.equal(shortcutCommands.length, 1, "exactly one command is registered");
+const command = shortcutCommands[0];
+assert.equal(command.id, "browser-element-picker.annotate");
+assert.deepEqual(command.defaults["desktop:macos"], { code: "KeyC", modifiers: ["primary", "shift"] }, "cmd+shift+c on macos");
+assert.deepEqual(command.defaults["desktop:windows"], { code: "KeyC", modifiers: ["primary", "shift"] }, "ctrl+shift+c on windows");
+assert.equal(command.defaults["web:macos"], undefined, "the web build gets no binding");
+assert.equal(command.label(), "标注页面元素", "the cheatsheet shows a localized name");
+assert.deepEqual(command.regions, ["page", "editable"], "page and composer regions only");
+
+shortcutKeys = "⌘⇧C";
+for (const listener of catalogListeners) listener();
+assert.match(button.title, /⌘⇧C/, "the tooltip shows the effective binding");
+assert.equal(button.attributes["aria-keyshortcuts"], "Meta+Shift+C", "the button exposes the shortcut to assistive tech");
+shortcutKeys = "";
+for (const listener of catalogListeners) listener();
+assert.equal(button.attributes["aria-keyshortcuts"], undefined, "an unbound command drops the attribute");
+
+const before = executed;
+const claimed = command.resolve({ region: "page", modal: null });
+assert.equal(claimed.status, "handled", "an open page claims the key");
+claimed.run();
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.ok(executed > before, "running the command starts the session");
+
+const originalUrl = frame.getURL;
+frame.getURL = () => "about:blank";
+assert.equal(command.resolve({ region: "page", modal: null }).status, "pass", "a non-page leaves the key to the app");
+frame.getURL = originalUrl;
+
+const originalBox = frame.box;
+frame.box = { top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0 };
+assert.equal(command.resolve({ region: "page", modal: null }).status, "pass", "a hidden page leaves the key to the app");
+frame.box = originalBox;
+assert.equal(command.resolve({ region: "page", modal: null }).status, "handled", "the visible page claims it again");
 
 // --- teardown ------------------------------------------------------------------------
 for (const disposer of disposers) disposer();
