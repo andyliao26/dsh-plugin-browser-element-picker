@@ -187,7 +187,7 @@ const click = async () => {
 const pageLine = "页面：订单列表 | http://localhost:5173/orders";
 const targetLine = "1. #app > div.list > button.btn.primary:nth-of-type(2) | <button> 提交订单";
 // The request section is a delimiter line, a rule, then the user's own words.
-const request = (text) => `\n\n---\n**修改要求:** ${text}`;
+const request = (text) => `\n\n**修改要求:** ${text}`;
 
 await click();
 assert.equal(quotes.length, 1);

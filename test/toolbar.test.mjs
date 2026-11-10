@@ -199,7 +199,6 @@ assert.equal(block, [
   "页面：登录 | http://localhost:5173/login",
   "1. #login | <button> 登录",
   "",
-  "---",
   "**修改要求:** 按钮换成深绿",
 ].join("\n"), "the page line starts the block, the request closes it");
 assert.equal(block.includes("计算样式"), false, "no computed styles in the block");
@@ -233,7 +232,6 @@ assert.equal(quotes[1], [
   "  - color: #101828 → #112233",
   "  - font-size: 14px → 12px",
   "",
-  "---",
   "**修改要求:** 按钮换成深绿",
 ].join("\n"), "multi-target block nests the design deltas");
 

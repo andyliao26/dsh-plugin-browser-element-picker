@@ -150,10 +150,12 @@ field and blurring resets it to that baseline, not to the last committed value.
 The prompt block is: one `页面：{title} | {url}` line, numbered targets
 `{index}. {selector}[（匹配 N）] | <{tag}> {text}`, an optional
 `组件：{component} {source}` subline, nested design lines, and — only when a
-comment exists — a blank line, `---`, and `**修改要求:** {comment}`. There is no
-header and no footer; the block carries no instruction the user did not type.
-The blank line before `---` is required, or markdown reads the rule as a setext
-heading under the previous line. It deliberately carries no computed styles,
+comment exists — a blank line and `**修改要求:** {comment}`. There is no header,
+no footer, and no rule above the request; the block carries no instruction the
+user did not type. The blank line before `**修改要求:**` is required, or
+markdown joins the request to the last target line. Blocks inserted after
+existing draft content are prefixed with `\n\n---\n\n` so consecutive
+annotations stay separate sections. It deliberately carries no computed styles,
 outer HTML, geometry, viewport, scroll position, or per-unique-target match
 count. Do not re-add those without a spec change. `formatAnnotation(t, result)`
 has no quote flag; the quote-node path and the plain-text fallback share it.

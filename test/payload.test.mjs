@@ -173,7 +173,7 @@ assert.equal(block.includes("计算样式"), false, "no computed styles in the p
 assert.equal(block.includes("外部 HTML"), false, "no HTML in the prompt");
 assert.equal(block.includes("位置"), false, "no geometry in the prompt");
 assert.equal(block.includes("[object Object]"), false, "no object leaks into the prompt");
-assert.match(block, /\n\n---\n\*\*修改要求:\*\* 按钮换成品牌绿$/);
-assert.equal(block.slice(block.indexOf("---")).match(/修改要求/g).length, 1, "exactly one request label");
+assert.match(block, /\n\n\*\*修改要求:\*\* 按钮换成品牌绿$/);
+assert.equal(block.match(/修改要求/g).length, 1, "exactly one request label");
 
 console.log("payload contract OK");
