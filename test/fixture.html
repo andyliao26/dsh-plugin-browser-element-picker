@@ -34,10 +34,62 @@
     <div id="absolute-source" style="margin-top: 12px; height: 16px;"></div>
     <div id="minified-name" style="margin-top: 12px; height: 16px;"></div>
     <div id="stack-source" style="margin-top: 12px; height: 16px;"></div>
+    <div id="unrelated" style="margin-top: 12px; height: 16px;">无关容器</div>
+  </div>
+  <div id="sheet" hidden style="position: fixed; top: 40px; right: 20px; width: 340px; padding: 16px; background: #fff; border: 1px solid #d0d5dd; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.18);">
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+      <strong>环境维护</strong>
+      <button type="button" id="sheet-close" aria-label="关闭">&times;</button>
+    </div>
+    <fieldset id="sheet-fieldset" style="border: 1px solid #e4e7ec; border-radius: 8px; padding: 12px;">
+      <legend>目标 1</legend>
+      <label style="display: block; margin-bottom: 8px;">目标 1 名称 <input id="sheet-target-name" value="uat-223"></label>
+      <label style="display: block; margin-bottom: 8px;">目标 1 主机 <input id="sheet-host" value="192.168.3.223"></label>
+      <button type="button" id="sheet-add">添加目标</button>
+    </fieldset>
   </div>
   <script>
     window.__pageClicks = 0;
     document.addEventListener('click', () => { window.__pageClicks += 1; });
+
+    // A page-level sheet that plays by the rules a real drawer does: focus guards
+    // that only accept their own container, and mousedown dismissal registered on
+    // window capture at load time - before the annotation bundle is injected.
+    window.__sheet = (function () {
+      const sheet = document.getElementById('sheet');
+      const first = document.getElementById('sheet-target-name');
+      let guardTimer = null;
+      let thief = null;
+      const steal = (event) => {
+        if (sheet.hidden || sheet.contains(event.target)) return;
+        first.focus();
+      };
+      const recheck = (event) => {
+        if (sheet.hidden || (event.relatedTarget && sheet.contains(event.relatedTarget))) return;
+        clearTimeout(guardTimer);
+        guardTimer = setTimeout(() => {
+          if (sheet.hidden || sheet.contains(document.activeElement)) return;
+          first.focus();
+        }, 40);
+      };
+      const dismiss = (event) => {
+        if (sheet.hidden || sheet.contains(event.target)) return;
+        sheet.hidden = true;
+      };
+      document.addEventListener('focusin', steal, true);
+      document.addEventListener('focusout', recheck, true);
+      window.addEventListener('mousedown', dismiss, true);
+      document.addEventListener('mousedown', dismiss);
+      document.getElementById('sheet-close').addEventListener('click', () => { sheet.hidden = true; });
+      return {
+        open() { sheet.hidden = false; first.focus(); return sheet.hidden; },
+        close() { sheet.hidden = true; clearTimeout(guardTimer); return sheet.hidden; },
+        // Bypasses containment: steals once, or forever, regardless of what holds focus.
+        stealOnceLater(ms) { setTimeout(() => first.focus(), ms); return true; },
+        startThief() { first.focus(); thief = setInterval(() => first.focus(), 40); return true; },
+        stopThief() { clearInterval(thief); thief = null; return true; },
+      };
+    })();
 
     // Hand-written React fibers: enough shape for the guest to walk (type, return,
     // _debugSource) without pulling React into the test suite.

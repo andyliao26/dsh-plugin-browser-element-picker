@@ -111,6 +111,7 @@ globalThis.ResizeObserver = class { constructor() {} observe() {} disconnect() {
 globalThis.MutationObserver = class { observe() {} disconnect() {} };
 
 const drafts = [];
+const submits = [];
 const quotes = [];
 const references = [];
 const sources = [];
@@ -155,7 +156,7 @@ const ctx = {
               return true;
             },
             insertQuote: (text) => { if (!quoteAccepted) return false; quotes.push(text); return true; },
-            submit: () => {},
+            submit: () => { submits.push(1); },
           }),
         },
       };
@@ -332,6 +333,15 @@ guestResult = { ok: false, reason: "cancel" };
 await click();
 assert.equal(quotes.length, 8, "a cancelled session leaves the composer alone");
 assert.equal(drafts.length, 1);
+
+// --- an unfinished session writes nothing ---------------------------------------------
+const settled = { references: references.length, quotes: quotes.length, drafts: drafts.length, submits: submits.length };
+frame.executeJavaScript = () => new Promise(() => {});
+await click();
+assert.equal(references.length, settled.references, "an unfinished session inserts no reference");
+assert.equal(quotes.length, settled.quotes, "an unfinished session inserts no quote");
+assert.equal(drafts.length, settled.drafts, "an unfinished session writes no draft");
+assert.equal(submits.length, settled.submits, "an unfinished session never submits");
 
 // --- teardown -------------------------------------------------------------------------
 for (const disposer of disposers) disposer();

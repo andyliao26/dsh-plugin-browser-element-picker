@@ -6,7 +6,7 @@ import { createServer } from "node:http";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { GUEST_TEXTS, startSession } from "./cdp.mjs";
+import { GUEST_TEXTS, pressAt, startSession, typeText } from "./cdp.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const CHROME = process.env.PICKER_CHROME ??
@@ -120,6 +120,16 @@ const clickPage = (selector, shift = false) => evaluate(client, `(() => {
   const rect = element.getBoundingClientRect();
   const x = rect.left + rect.width / 2;
   const y = rect.top + rect.height / 2;
+  document.body.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, clientX: x, clientY: y }));
+  document.body.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: x, clientY: y, shiftKey: ${shift ? "true" : "false"} }));
+  return { x, y };
+})();`);
+
+const clickAtPoint = (selector, fx, fy, shift = false) => evaluate(client, `(() => {
+  const element = document.querySelector(${JSON.stringify(selector)});
+  const rect = element.getBoundingClientRect();
+  const x = rect.left + rect.width * ${fx};
+  const y = rect.top + rect.height * ${fy};
   document.body.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, clientX: x, clientY: y }));
   document.body.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: x, clientY: y, shiftKey: ${shift ? "true" : "false"} }));
   return { x, y };
@@ -647,7 +657,7 @@ assert.equal(await evaluate(client, "document.documentElement.style.cursor"), "p
 assert.equal(await evaluate(client, "document.documentElement.style.userSelect"), "text", "the page user-select is restored");
 await evaluate(client, 'document.documentElement.style.removeProperty("cursor"); document.documentElement.style.removeProperty("user-select"); true');
 
-// ---------------------------------------------------------------- 10. detached targets are dropped
+// ---------------------------------------------------------------- 10. detached targets are dropped first
 assert.equal(await evaluate(client, START), "started");
 await clickPage("#first");
 await clickPage("#target", true);
@@ -659,14 +669,97 @@ await evaluate(client, `(() => {
   return true;
 })();`);
 await role("design-apply", "click");
+assert.equal(await evaluate(client, `document.querySelector(".list").contains(document.querySelector("[data-dsh-annotation]"))`), true, "containment follows the selected target");
 await evaluate(client, 'document.querySelector("#target").remove(); true');
+await keyInCard("Enter");
+await sleep(80);
+assert.equal(await evaluate(client, "window.__r"), undefined, "a removed target blocks the finish");
+assert.equal(await evaluate(client, `${SR}.querySelectorAll('[data-role="chip"]').length`), 1, "the removed target leaves the selection");
+assert.equal(await evaluate(client, `${SR}.querySelector('[data-role="notice"]').textContent`), GUEST_TEXTS.removedTarget, "the removal is named");
+assert.equal(await evaluate(client, "window.__dshAnnotationState !== undefined"), true, "the session stays active");
 await keyInCard("Enter");
 await sleep(80);
 const detached = await evaluate(client, "window.__r");
 assert.equal(detached.ok, true);
-assert.equal(detached.targets.length, 1, "the detached target is omitted");
+assert.equal(detached.targets.length, 1, "only the target still in the page is annotated");
 assert.equal(detached.targets[0].selector, "#first");
-assert.equal(detached.design.length, 0);
+assert.equal(detached.design.length, 0, "the removed target takes its design deltas with it");
+
+assert.equal(await evaluate(client, START), "started");
+await clickPage("#first");
+await evaluate(client, 'document.querySelector("#first").remove(); true');
+await keyInCard("Enter");
+await sleep(80);
+assert.equal(await evaluate(client, "window.__r"), undefined, "an empty selection cannot finish");
+assert.equal(await evaluate(client, `${SR}.querySelectorAll('[data-role="chip"]').length`), 0, "every removed target leaves the selection");
+assert.equal(await evaluate(client, `document.querySelector(".list").contains(document.querySelector("[data-dsh-annotation]"))`), false, "no target means no delegated containment");
+assert.equal(await role("card"), "none", "the card closes when nothing is left");
+assert.equal(await evaluate(client, "document.documentElement.style.cursor"), "crosshair", "the session falls back to picking");
+await keyInCard("Enter");
+await sleep(80);
+assert.equal(await evaluate(client, "window.__r"), undefined, "an empty selection still cannot finish");
+await keyInCard("Escape");
+await sleep(80);
+assert.equal(await evaluate(client, "window.__r.ok"), false, "escape cancels the empty session");
+await evaluate(client, `(() => {
+  const button = document.createElement("button");
+  button.id = "first";
+  button.textContent = "返回";
+  document.querySelector(".list").prepend(button);
+  return true;
+})();`);
+
+// ---------------------------------------------------------------- 10b. filtering keeps the survivor's own baseline
+await evaluate(client, `(() => {
+  const button = document.createElement("button");
+  button.className = "btn primary";
+  button.id = "target";
+  button.textContent = "提交订单";
+  document.querySelector(".list").append(button);
+  document.querySelector("#first").style.width = "120px";
+  document.querySelector("#target").style.width = "200px";
+  return true;
+})();`);
+assert.equal(await evaluate(client, START), "started");
+await clickPage("#first");
+await clickPage("#target", true);
+await role("design", "click");
+await evaluate(client, `(() => {
+  const input = ${SR}.querySelector('[data-field="width"] input');
+  input.value = "240";
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  return true;
+})();`);
+await role("design-apply", "click");
+await evaluate(client, 'document.querySelector("#target").style.width = "260px"; document.querySelector("#first").remove(); true');
+await keyInCard("Enter");
+await sleep(80);
+assert.equal(await evaluate(client, `${SR}.querySelectorAll('[data-role="chip"]').length`), 1, "the survivor stays selected");
+await role("design", "click");
+await evaluate(client, `(() => {
+  const input = ${SR}.querySelector('[data-field="width"] input');
+  input.value = "300";
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  return true;
+})();`);
+await role("design-apply", "click");
+await keyInCard("Enter");
+await sleep(80);
+const survivor = await evaluate(client, "window.__r");
+assert.equal(survivor.targets.length, 1);
+assert.equal(survivor.targets[0].selector, "#target");
+assert.deepEqual(
+  survivor.design[0].changes,
+  [{ property: "width", from: "200px", to: "300px" }],
+  "the survivor reuses its own baseline after an earlier target is dropped",
+);
+await evaluate(client, `(() => {
+  const button = document.createElement("button");
+  button.id = "first";
+  button.textContent = "返回";
+  document.querySelector(".list").prepend(button);
+  return true;
+})();`);
 
 // ---------------------------------------------------------------- 11. React-shaped markup
 assert.equal(await evaluate(client, START), "started");
@@ -749,6 +842,227 @@ const mixedClasses = await evaluate(client, "window.__r");
 const mixedSelector = mixedClasses.targets[0].selector;
 assert.match(mixedSelector, /\.order-card/, "a semantic class survives");
 assert.equal(/\.(flex|p-4)\b/.test(mixedSelector), false, "utilities next to it are dropped");
+
+// ---------------------------------------------------------------- 12. real input helpers
+await evaluate(client, "window.__pageClicks = 0; true");
+const firstPoint = await evaluate(client, `(() => {
+  const rect = document.querySelector("#first").getBoundingClientRect();
+  return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+})();`);
+await pressAt(client.send, firstPoint.x, firstPoint.y);
+await sleep(40);
+assert.equal(await evaluate(client, "window.__pageClicks > 0"), true, "a real press reaches the page");
+
+await evaluate(client, `(() => {
+  window.__sheet.open();
+  const input = document.querySelector("#sheet-host");
+  input.value = "";
+  input.focus();
+  return true;
+})();`);
+await typeText(client.send, "abc");
+assert.equal(await evaluate(client, 'document.querySelector("#sheet-host").value'), "abc", "real keys land in the focused input");
+await evaluate(client, "window.__sheet.close(); true");
+
+// ---------------------------------------------------------------- 13. a page sheet treats the overlay as its own
+assert.equal(await evaluate(client, "window.__sheet.open()"), false, "the fixture sheet opens");
+assert.equal(await evaluate(client, START), "started");
+await clickAtPoint("#sheet-fieldset", 0.02, 0.5);
+await sleep(160);
+assert.equal(await evaluate(client, 'document.querySelector("#sheet").hidden'), false, "the sheet stays open after a pick");
+assert.equal(await evaluate(client, `document.activeElement === document.querySelector("[data-dsh-annotation]")`), true, "focus moved into the overlay");
+assert.equal(await evaluate(client, `${SR}.activeElement === ${SR}.querySelector('[data-role="comment"]')`), true, "the comment field holds focus");
+assert.equal(await evaluate(client, `document.querySelector("#sheet").contains(document.querySelector("[data-dsh-annotation]"))`), true, "containment follows the target");
+assert.equal(await evaluate(client, `document.querySelector("#unrelated").contains(document.querySelector("[data-dsh-annotation]"))`), false, "an unrelated container still excludes the overlay");
+assert.equal(await evaluate(client, `document.querySelector("[data-dsh-annotation]").closest("#sheet") === document.querySelector("#sheet")`), true, "ancestor lookup matches the target");
+
+await evaluate(client, `${SR}.querySelector('[data-role="comment"]').value = ""; true`);
+await typeText(client.send, "品牌绿");
+assert.equal(await evaluate(client, `${SR}.querySelector('[data-role="comment"]').value`), "品牌绿", "typing without a click lands in the comment field");
+assert.equal(await evaluate(client, 'document.querySelector("#sheet-target-name").value'), "uat-223", "no page input received the characters");
+
+const commentPoint = await evaluate(client, `(() => {
+  const rect = ${SR}.querySelector('[data-role="comment"]').getBoundingClientRect();
+  return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+})();`);
+await pressAt(client.send, commentPoint.x, commentPoint.y);
+await sleep(120);
+assert.equal(await evaluate(client, 'document.querySelector("#sheet").hidden'), false, "a real press inside the card does not dismiss the sheet");
+assert.equal(await evaluate(client, `${SR}.activeElement === ${SR}.querySelector('[data-role="comment"]')`), true, "the press keeps the caret in the field");
+
+await evaluate(client, 'document.querySelector("#sheet-host").focus(); true');
+await clickPage("#sheet-add", true);
+assert.equal(await evaluate(client, `${SR}.querySelectorAll('[data-role="chip"]').length`), 2, "two targets before the sheet closes");
+assert.equal(await evaluate(client, `${SR}.activeElement === ${SR}.querySelector('[data-role="comment"]')`), true, "adding a target brings the field back into focus");
+await evaluate(client, "window.__sheet.close(); document.querySelector('#sheet-add').remove(); true");
+await keyInCard("Enter");
+await sleep(80);
+assert.equal(await evaluate(client, "window.__r"), undefined, "a closed sheet blocks the finish");
+assert.equal(await evaluate(client, `${SR}.querySelectorAll('[data-role="chip"]').length`), 1, "the removed target leaves the selection");
+assert.equal(await evaluate(client, `${SR}.querySelector('[data-role="notice"]').textContent`), GUEST_TEXTS.removedTarget, "the removal is named");
+await evaluate(client, "window.__oldHost = document.querySelector('[data-dsh-annotation]'); true");
+await keyInCard("Enter");
+await sleep(80);
+const sheetGone = await evaluate(client, "window.__r");
+assert.equal(sheetGone.targets.length, 1, "only the surviving target is annotated");
+assert.equal(sheetGone.targets[0].selector, "#sheet-fieldset");
+assert.equal(await evaluate(client, 'document.querySelector("[data-dsh-annotation]") === null'), true, "a finish removes the overlay");
+assert.equal(await evaluate(client, 'document.querySelector("#sheet").contains(window.__oldHost)'), false, "a finish restores containment");
+assert.equal(await evaluate(client, 'window.__oldHost.closest("#sheet") === null'), true, "a finish restores ancestor lookup");
+
+// ---------------------------------------------------------------- 14. the page is restored on every exit
+assert.equal(await evaluate(client, "window.__sheet.open()"), false, "the sheet reopens");
+assert.equal(await evaluate(client, START), "started");
+await clickAtPoint("#sheet-fieldset", 0.02, 0.5);
+await sleep(60);
+assert.equal(await evaluate(client, 'document.querySelector("#sheet").contains(document.querySelector("[data-dsh-annotation]"))'), true, "the new session delegates again");
+await evaluate(client, "window.__oldHost = document.querySelector('[data-dsh-annotation]'); true");
+await keyInCard("Escape");
+await sleep(40);
+await keyInCard("Escape");
+await sleep(80);
+assert.equal(await evaluate(client, 'document.querySelector("[data-dsh-annotation]") === null'), true, "cancel removes the overlay");
+assert.equal(await evaluate(client, 'document.querySelector("#sheet").contains(window.__oldHost)'), false, "the removed overlay is an outsider again");
+
+assert.equal(await evaluate(client, START), "started");
+await clickAtPoint("#sheet-fieldset", 0.02, 0.5);
+await sleep(60);
+assert.equal(await evaluate(client, 'document.querySelector("#sheet").contains(document.querySelector("[data-dsh-annotation]"))'), true, "a second session delegates too");
+await evaluate(client, "window.__oldHost = document.querySelector('[data-dsh-annotation]'); true");
+await evaluate(client, "window.__dshAnnotationState.cancel(); true");
+await sleep(80);
+assert.equal(await evaluate(client, "window.__r.reason"), "cancel", "a host cancel ends the session");
+assert.equal(await evaluate(client, 'document.querySelector("#sheet").contains(window.__oldHost)'), false, "a host cancel restores containment");
+assert.equal(await evaluate(client, 'document.querySelector("[data-dsh-annotation]") === null'), true, "a host cancel removes the overlay");
+
+assert.equal(await evaluate(client, START), "started");
+await clickAtPoint("#sheet-fieldset", 0.02, 0.5);
+await sleep(60);
+await evaluate(client, "window.__oldHost = document.querySelector('[data-dsh-annotation]'); true");
+assert.equal(await evaluate(client, START), "started");
+await sleep(80);
+assert.equal(await evaluate(client, "window.__r.reason"), "cancel", "a new session cancels the running one");
+assert.equal(await evaluate(client, `${SR}.querySelectorAll('[data-role="chip"]').length`), 0, "the replacement session starts empty");
+await clickAtPoint("#sheet-fieldset", 0.02, 0.5);
+await sleep(60);
+assert.equal(await evaluate(client, 'document.querySelector("#sheet").contains(document.querySelector("[data-dsh-annotation]"))'), true, "the replacement delegates on its own");
+assert.equal(await evaluate(client, 'document.querySelector("#sheet").contains(window.__oldHost)'), false, "the replaced overlay is an outsider");
+await keyInCard("Escape");
+await sleep(40);
+await keyInCard("Escape");
+await sleep(60);
+
+// a cancelled session leaves no late focus callback on the page
+assert.equal(await evaluate(client, START), "started");
+await clickAtPoint("#sheet-fieldset", 0.02, 0.5);
+await keyInCard("Escape");
+await sleep(40);
+await keyInCard("Escape");
+await sleep(40);
+await evaluate(client, 'document.querySelector("#sheet-target-name").focus(); true');
+await sleep(320);
+assert.equal(await evaluate(client, 'document.activeElement === document.querySelector("#sheet-target-name")'), true, "a cancelled session leaves page focus alone");
+
+assert.equal(await evaluate(client, START), "started");
+await clickAtPoint("#sheet-fieldset", 0.02, 0.5);
+await sleep(60);
+await evaluate(client, "window.__oldHost = document.querySelector('[data-dsh-annotation]'); window.dispatchEvent(new PageTransitionEvent('pagehide')); true");
+await sleep(80);
+assert.equal(await evaluate(client, "window.__r.reason"), "cancel", "pagehide ends the session");
+assert.equal(await evaluate(client, 'document.querySelector("[data-dsh-annotation]") === null'), true, "pagehide removes the overlay");
+assert.equal(await evaluate(client, 'document.querySelector("#sheet").contains(window.__oldHost)'), false, "pagehide restores containment");
+assert.equal(await evaluate(client, 'window.__oldHost.closest("#sheet") === null'), true, "pagehide restores ancestor lookup");
+assert.equal(await evaluate(client, "window.__dshAnnotationState === undefined"), true, "pagehide clears the session state");
+
+// ---------------------------------------------------------------- 15. a page that keeps holding focus is reported
+assert.equal(await evaluate(client, "window.__sheet.open()"), false, "the sheet reopens for the focus lock");
+await evaluate(client, "window.__sheet.startThief(); true");
+assert.equal(await evaluate(client, START), "started");
+await clickAtPoint("#sheet-fieldset", 0.02, 0.5);
+await sleep(340);
+assert.equal(await evaluate(client, `${SR}.querySelector('[data-role="notice"]').textContent`), GUEST_TEXTS.focusBlocked, "the focus lock is reported");
+assert.equal(await role("card"), "block", "the card survives the notice");
+assert.equal(await evaluate(client, `${SR}.querySelectorAll('[data-role="chip"]').length`), 1, "the selection survives the notice");
+await evaluate(client, "window.__sheet.stopThief(); true");
+const retryPoint = await evaluate(client, `(() => {
+  const rect = ${SR}.querySelector('[data-role="comment"]').getBoundingClientRect();
+  return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+})();`);
+await pressAt(client.send, retryPoint.x, retryPoint.y);
+await sleep(80);
+assert.equal(await evaluate(client, `${SR}.activeElement === ${SR}.querySelector('[data-role="comment"]')`), true, "clicking the field works after the notice");
+assert.equal(await evaluate(client, `${SR}.querySelector('[data-role="notice"]').style.display`), "none", "clicking the field clears the notice");
+await typeText(client.send, "x");
+assert.equal(await evaluate(client, `${SR}.querySelector('[data-role="comment"]').value`), "x", "typing resumes after the notice");
+await keyInCard("Escape");
+await sleep(40);
+await keyInCard("Escape");
+await sleep(80);
+
+// ---------------------------------------------------------------- 15b. one delayed theft is not a lock
+assert.equal(await evaluate(client, "window.__sheet.open()"), false, "the sheet reopens for the delayed guard");
+assert.equal(await evaluate(client, START), "started");
+await clickAtPoint("#sheet-fieldset", 0.02, 0.5);
+await evaluate(client, "window.__sheet.stealOnceLater(40); true");
+await sleep(340);
+assert.equal(await evaluate(client, `${SR}.activeElement === ${SR}.querySelector('[data-role="comment"]')`), true, "one late theft still ends focused");
+assert.equal(await evaluate(client, `${SR}.querySelector('[data-role="notice"]').textContent`), "", "one late theft is not reported as a lock");
+await keyInCard("Escape");
+await sleep(40);
+await keyInCard("Escape");
+await sleep(80);
+
+// ---------------------------------------------------------------- 15c. a late callback leaves the design panel alone
+assert.equal(await evaluate(client, "window.__sheet.open()"), false, "the sheet reopens for the design panel");
+assert.equal(await evaluate(client, START), "started");
+await clickAtPoint("#sheet-fieldset", 0.02, 0.5);
+await role("design", "click");
+await evaluate(client, `${SR}.querySelector('[data-field="width"] input').focus(); true`);
+await sleep(340);
+assert.equal(await evaluate(client, `${SR}.activeElement === ${SR}.querySelector('[data-field="width"] input')`), true, "the late focus callback leaves the panel alone");
+assert.equal(await evaluate(client, `${SR}.querySelector('[data-role="notice"]').textContent`), "", "the late focus callback reports nothing");
+await role("design-cancel", "click");
+await sleep(40);
+await keyInCard("Escape");
+await sleep(40);
+await keyInCard("Escape");
+await sleep(80);
+await evaluate(client, "window.__sheet.close(); true");
+
+// ---------------------------------------------------------------- 15d. the notice expires on its own
+assert.equal(await evaluate(client, "window.__sheet.open()"), false, "the sheet reopens for notice expiry");
+await evaluate(client, "window.__sheet.startThief(); true");
+assert.equal(await evaluate(client, START), "started");
+await clickAtPoint("#sheet-fieldset", 0.02, 0.5);
+await sleep(340);
+assert.equal(await evaluate(client, `${SR}.querySelector('[data-role="notice"]').style.display`), "block", "the notice is showing");
+await sleep(2600);
+assert.equal(await evaluate(client, `${SR}.querySelector('[data-role="notice"]').style.display`), "none", "the notice expires on its own");
+await evaluate(client, "window.__sheet.stopThief(); true");
+await keyInCard("Escape");
+await sleep(40);
+await keyInCard("Escape");
+await sleep(80);
+await evaluate(client, "window.__sheet.close(); true");
+
+// ---------------------------------------------------------------- 15e. reselecting must not strand the notice
+assert.equal(await evaluate(client, "window.__sheet.open()"), false, "the sheet reopens for the reselection check");
+assert.equal(await evaluate(client, START), "started");
+await clickAtPoint("#sheet-fieldset", 0.02, 0.5);
+await clickPage("#sheet-host", true);
+await evaluate(client, 'document.querySelector("#sheet-host").remove(); true');
+await keyInCard("Enter");
+await sleep(80);
+assert.equal(await evaluate(client, `${SR}.querySelector('[data-role="notice"]').textContent`), GUEST_TEXTS.removedTarget, "the removal notice is up");
+assert.equal(await evaluate(client, `${SR}.activeElement === ${SR}.querySelector('[data-role="comment"]')`), true, "the field still holds focus");
+await clickPage("#sheet-target-name", true);
+assert.equal(await evaluate(client, `${SR}.querySelectorAll('[data-role="chip"]').length`), 2, "the reselection adds a target");
+assert.equal(await evaluate(client, `${SR}.querySelector('[data-role="notice"]').style.display`), "block", "the notice survives the reselection");
+await sleep(2600);
+assert.equal(await evaluate(client, `${SR}.querySelector('[data-role="notice"]').style.display`), "none", "the notice still expires after a reselection");
+await keyInCard("Enter");
+await sleep(80);
+await evaluate(client, "window.__sheet.close(); true");
 
 client.close();
 chrome.kill("SIGKILL");

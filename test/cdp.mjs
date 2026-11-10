@@ -74,8 +74,7 @@ function connect(url) {
  * Serve `htmlPath` and open it in headless Chromium.
  * @returns {Promise<{ evaluate: (expression: string) => Promise<any>, clickAt: (selector: string, shift?: boolean) => Promise<any>, close: () => void }>}
  */
-export async function launchPage(htmlPath) {
-  const { server, port } = await serve(htmlPath);
+export async function launchPage(htmlPath) {  const { server, port } = await serve(htmlPath);
   const chrome = spawn(CHROME, [
     "--headless", "--no-sandbox", "--disable-gpu", "--remote-debugging-port=0",
     "--window-size=1200,900", `http://127.0.0.1:${port}/`,
@@ -134,6 +133,23 @@ export async function launchPage(htmlPath) {
   };
 }
 
+/** A real left press at viewport coordinates: the browser produces focus and defaults. */
+export async function pressAt(send, x, y) {
+  const x0 = Math.round(x);
+  const y0 = Math.round(y);
+  await send("Input.dispatchMouseEvent", { type: "mouseMoved", x: x0, y: y0, buttons: 0 });
+  await send("Input.dispatchMouseEvent", { type: "mousePressed", x: x0, y: y0, button: "left", buttons: 1, clickCount: 1 });
+  await send("Input.dispatchMouseEvent", { type: "mouseReleased", x: x0, y: y0, button: "left", buttons: 1, clickCount: 1 });
+}
+
+/** Type real characters into whatever currently holds focus. */
+export async function typeText(send, text) {
+  for (const char of text) {
+    await send("Input.dispatchKeyEvent", { type: "keyDown", text: char, unmodifiedText: char });
+    await send("Input.dispatchKeyEvent", { type: "keyUp" });
+  }
+}
+
 /** Localized guest copy used by the tests. */
 export const GUEST_TEXTS = {
   hint: "点击选择元素 · Shift 点击可多选 · Enter 填入 · ⌘Enter 直接发送 · Esc 退出",
@@ -146,6 +162,8 @@ export const GUEST_TEXTS = {
   fillHint: "填入输入框 · ⌘/Ctrl+Enter 直接发送",
   close: "关闭",
   remove: "移除",
+  removedTarget: "目标已从页面移除",
+  focusBlocked: "页面正占用焦点，请点击评论框",
   empty: "（无可见文本）",
   labels: {
     color: "文本颜色", background: "背景", opacity: "不透明度", fontSize: "字号", fontWeight: "字重",
