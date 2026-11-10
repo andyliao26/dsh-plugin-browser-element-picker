@@ -973,13 +973,22 @@ assert.equal(await evaluate(client, 'document.querySelector("[data-dsh-annotatio
 assert.equal(await evaluate(client, 'document.querySelector("#sheet").contains(window.__oldHost)'), false, "pagehide restores containment");
 assert.equal(await evaluate(client, 'window.__oldHost.closest("#sheet") === null'), true, "pagehide restores ancestor lookup");
 assert.equal(await evaluate(client, "window.__dshAnnotationState === undefined"), true, "pagehide clears the session state");
+assert.equal(await evaluate(client, 'document.querySelector("#sheet").hidden'), false, "the sheet is still open before the page press");
+await evaluate(client, 'document.querySelector("#unrelated").scrollIntoView({ block: "center" }); true');
+const outsidePoint = await evaluate(client, `(() => {
+  const rect = document.querySelector("#unrelated").getBoundingClientRect();
+  return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+})();`);
+await pressAt(client.send, outsidePoint.x, outsidePoint.y);
+await sleep(100);
+assert.equal(await evaluate(client, 'document.querySelector("#sheet").hidden'), true, "the page still sees its own events after a session");
 
 // ---------------------------------------------------------------- 15. a page that keeps holding focus is reported
 assert.equal(await evaluate(client, "window.__sheet.open()"), false, "the sheet reopens for the focus lock");
 await evaluate(client, "window.__sheet.startThief(); true");
 assert.equal(await evaluate(client, START), "started");
 await clickAtPoint("#sheet-fieldset", 0.02, 0.5);
-await sleep(340);
+await sleep(420);
 assert.equal(await evaluate(client, `${SR}.querySelector('[data-role="notice"]').textContent`), GUEST_TEXTS.focusBlocked, "the focus lock is reported");
 assert.equal(await role("card"), "block", "the card survives the notice");
 assert.equal(await evaluate(client, `${SR}.querySelectorAll('[data-role="chip"]').length`), 1, "the selection survives the notice");
@@ -1004,7 +1013,7 @@ assert.equal(await evaluate(client, "window.__sheet.open()"), false, "the sheet 
 assert.equal(await evaluate(client, START), "started");
 await clickAtPoint("#sheet-fieldset", 0.02, 0.5);
 await evaluate(client, "window.__sheet.stealOnceLater(40); true");
-await sleep(340);
+await sleep(420);
 assert.equal(await evaluate(client, `${SR}.activeElement === ${SR}.querySelector('[data-role="comment"]')`), true, "one late theft still ends focused");
 assert.equal(await evaluate(client, `${SR}.querySelector('[data-role="notice"]').textContent`), "", "one late theft is not reported as a lock");
 await keyInCard("Escape");
@@ -1018,7 +1027,7 @@ assert.equal(await evaluate(client, START), "started");
 await clickAtPoint("#sheet-fieldset", 0.02, 0.5);
 await role("design", "click");
 await evaluate(client, `${SR}.querySelector('[data-field="width"] input').focus(); true`);
-await sleep(340);
+await sleep(420);
 assert.equal(await evaluate(client, `${SR}.activeElement === ${SR}.querySelector('[data-field="width"] input')`), true, "the late focus callback leaves the panel alone");
 assert.equal(await evaluate(client, `${SR}.querySelector('[data-role="notice"]').textContent`), "", "the late focus callback reports nothing");
 await role("design-cancel", "click");
@@ -1034,7 +1043,7 @@ assert.equal(await evaluate(client, "window.__sheet.open()"), false, "the sheet 
 await evaluate(client, "window.__sheet.startThief(); true");
 assert.equal(await evaluate(client, START), "started");
 await clickAtPoint("#sheet-fieldset", 0.02, 0.5);
-await sleep(340);
+await sleep(420);
 assert.equal(await evaluate(client, `${SR}.querySelector('[data-role="notice"]').style.display`), "block", "the notice is showing");
 await sleep(2600);
 assert.equal(await evaluate(client, `${SR}.querySelector('[data-role="notice"]').style.display`), "none", "the notice expires on its own");

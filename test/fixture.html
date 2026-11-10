@@ -80,6 +80,24 @@
       document.addEventListener('focusout', recheck, true);
       window.addEventListener('mousedown', dismiss, true);
       document.addEventListener('mousedown', dismiss);
+      const walkUp = (node) => {
+        for (let cursor = node; cursor; cursor = cursor.parentNode) if (cursor === sheet) return true;
+        return false;
+      };
+      // Other ways a real drawer decides "outside", none of which go through contains:
+      // composedPath on the bubble phase, composedPath on the capture phase, parentNode walking.
+      document.addEventListener('mousedown', (event) => {
+        if (sheet.hidden || event.composedPath().indexOf(sheet) >= 0) return;
+        sheet.hidden = true;
+      });
+      document.addEventListener('mousedown', (event) => {
+        if (sheet.hidden || event.composedPath().indexOf(sheet) >= 0) return;
+        sheet.hidden = true;
+      }, true);
+      document.addEventListener('mousedown', (event) => {
+        if (sheet.hidden || walkUp(event.target)) return;
+        sheet.hidden = true;
+      });
       document.getElementById('sheet-close').addEventListener('click', () => { sheet.hidden = true; });
       return {
         open() { sheet.hidden = false; first.focus(); return sheet.hidden; },
